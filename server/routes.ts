@@ -734,43 +734,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Admin creator routes
-  app.get("/api/admin/creators", requireAuth, requireRole('admin'), async (req, res) => {
-    try {
-      const creators = await storage.getAllCreators();
-      res.json(creators);
-    } catch (error: any) {
-      res.status(500).send(error.message);
-    }
-  });
-
-  app.post("/api/admin/creators/:id/suspend", requireAuth, requireRole('admin'), async (req, res) => {
-    try {
-      const user = await storage.suspendUser(req.params.id);
-      res.json(user);
-    } catch (error: any) {
-      res.status(500).send(error.message);
-    }
-  });
-
-  app.post("/api/admin/creators/:id/unsuspend", requireAuth, requireRole('admin'), async (req, res) => {
-    try {
-      const user = await storage.unsuspendUser(req.params.id);
-      res.json(user);
-    } catch (error: any) {
-      res.status(500).send(error.message);
-    }
-  });
-
-  app.post("/api/admin/creators/:id/ban", requireAuth, requireRole('admin'), async (req, res) => {
-    try {
-      const user = await storage.banUser(req.params.id);
-      res.json(user);
-    } catch (error: any) {
-      res.status(500).send(error.message);
-    }
-  });
-
   app.get("/api/admin/offers", requireAuth, requireRole('admin'), async (req, res) => {
     try {
       const offers = await storage.getPendingOffers();

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation } from "@tanstack/react-query";
@@ -7,7 +7,6 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, DollarSign, Users, Eye, Calendar, Upload, Trash2, Video, AlertCircle } from "lucide-react";
-import { ObjectUploader } from "@/components/ObjectUploader";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -59,6 +58,21 @@ export default function CompanyOfferDetail() {
   const [videoDescription, setVideoDescription] = useState("");
   const [creatorCredit, setCreatorCredit] = useState("");
   const [originalPlatform, setOriginalPlatform] = useState("");
+  const [isUploading, setIsUploading] = useState(false);
+
+  // Memoized handler for dialog state to prevent input focus loss
+  const handleDialogOpenChange = useCallback((open: boolean) => {
+    setShowVideoDialog(open);
+    if (!open) {
+      // Reset form when dialog closes
+      setVideoUrl("");
+      setVideoTitle("");
+      setVideoDescription("");
+      setCreatorCredit("");
+      setOriginalPlatform("");
+      setIsUploading(false);
+    }
+  }, []);
 
   const createVideoMutation = useMutation({
     mutationFn: async (data: any) => {
@@ -66,12 +80,7 @@ export default function CompanyOfferDetail() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/offers/${offerId}/videos`] });
-      setShowVideoDialog(false);
-      setVideoUrl("");
-      setVideoTitle("");
-      setVideoDescription("");
-      setCreatorCredit("");
-      setOriginalPlatform("");
+      handleDialogOpenChange(false);
       toast({
         title: "Success",
         description: "Video added successfully",
@@ -106,30 +115,108 @@ export default function CompanyOfferDetail() {
     },
   });
 
-  const handleGetUploadUrl = async () => {
-    const response = await fetch("/api/objects/upload", {
-      method: "POST",
-      credentials: "include",
-    });
-    const data = await response.json();
-    return {
-      method: "PUT" as const,
-      url: data.uploadURL,
-    };
-  };
+  // Handle file selection and automatic upload
+  const handleFileSelect = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
 
-  const handleUploadComplete = (result: any) => {
-    if (result.successful && result.successful[0]) {
-      const uploadedUrl = result.successful[0].uploadURL.split("?")[0];
-      setVideoUrl(uploadedUrl);
-    }
-  };
-
-  const handleSubmitVideo = () => {
-    if (!videoUrl || !videoTitle) {
+    // Validate file type
+    const videoExtensions = ['.mp4', '.mov', '.avi', '.wmv', '.flv', '.webm', '.mkv', '.m4v'];
+    const isVideo = videoExtensions.some(ext => file.name.toLowerCase().endsWith(ext));
+    
+    if (!isVideo) {
       toast({
-        title: "Error",
-        description: "Video URL and title are required",
+        title: "Invalid File Type",
+        description: "Please upload a video file (MP4, MOV, AVI, WebM, etc.)",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Validate file size (500MB)
+    if (file.size > 524288000) {
+      toast({
+        title: "File Too Large",
+        description: "Video file must be less than 500MB",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Start uploading
+    setIsUploading(true);
+
+    try {
+      // Get upload URL
+      const uploadResponse = await fetch("/api/objects/upload", {
+        method: "POST",
+        credentials: "include",
+      });
+      const uploadData = await uploadResponse.json();
+
+      // Upload the file
+      const uploadResult = await fetch(uploadData.uploadURL, {
+        method: "PUT",
+        body: file,
+        headers: {
+          'Content-Type': file.type || 'video/mp4',
+        },
+      });
+
+      if (uploadResult.ok) {
+        const uploadedUrl = uploadData.uploadURL.split("?")[0];
+        setVideoUrl(uploadedUrl);
+        setIsUploading(false);
+        toast({
+          title: "Video Uploaded",
+          description: "Video uploaded successfully. Please fill in the details below.",
+        });
+      } else {
+        throw new Error("Upload failed");
+      }
+    } catch (error) {
+      setIsUploading(false);
+      toast({
+        title: "Upload Failed",
+        description: "Failed to upload video. Please try again.",
+        variant: "destructive",
+      });
+    }
+  }, [toast]);
+
+  const handleSubmitVideo = useCallback(() => {
+    // Validation
+    if (!videoUrl) {
+      toast({
+        title: "Video Required",
+        description: "Please upload a video file before submitting",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!videoTitle.trim()) {
+      toast({
+        title: "Title Required",
+        description: "Please provide a title for your video",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (videoTitle.length > 100) {
+      toast({
+        title: "Title Too Long",
+        description: "Video title must be 100 characters or less",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (videoDescription.length > 500) {
+      toast({
+        title: "Description Too Long",
+        description: "Video description must be 500 characters or less",
         variant: "destructive",
       });
       return;
@@ -137,16 +224,79 @@ export default function CompanyOfferDetail() {
 
     createVideoMutation.mutate({
       videoUrl,
-      title: videoTitle,
-      description: videoDescription,
-      creatorCredit,
-      originalPlatform,
+      title: videoTitle.trim(),
+      description: videoDescription.trim(),
+      creatorCredit: creatorCredit.trim(),
+      originalPlatform: originalPlatform.trim(),
     });
-  };
+  }, [videoUrl, videoTitle, videoDescription, creatorCredit, originalPlatform, createVideoMutation, toast]);
 
   const videoCount = videos.length;
   const canAddMoreVideos = videoCount < 12;
   const hasMinimumVideos = videoCount >= 6;
+
+  // Memoize the video uploader to prevent re-renders that cause input focus loss
+  const VideoUploader = useMemo(() => (
+    <div className="relative">
+      <input
+        type="file"
+        accept="video/*"
+        onChange={handleFileSelect}
+        disabled={isUploading}
+        className="hidden"
+        id="video-file-input"
+      />
+      <label
+        htmlFor="video-file-input"
+        className={`border-2 border-dashed rounded-lg p-6 text-center hover:border-primary transition-colors cursor-pointer block ${
+          isUploading ? 'opacity-50 cursor-not-allowed' : ''
+        }`}
+      >
+        <div className="flex flex-col items-center gap-2">
+          {isUploading ? (
+            <>
+              <div className="h-12 w-12 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center">
+                <Upload className="h-6 w-6 text-blue-600 dark:text-blue-400 animate-pulse" />
+              </div>
+              <div className="text-sm font-medium text-blue-600 dark:text-blue-400">
+                Uploading Video...
+              </div>
+              <div className="text-xs text-muted-foreground">
+                Please wait while your video is being uploaded
+              </div>
+            </>
+          ) : videoUrl ? (
+            <>
+              <div className="h-12 w-12 rounded-full bg-green-100 dark:bg-green-900 flex items-center justify-center">
+                <Video className="h-6 w-6 text-green-600 dark:text-green-400" />
+              </div>
+              <div className="text-sm font-medium text-green-600 dark:text-green-400">
+                Video Ready ✓
+              </div>
+              <div className="text-xs text-muted-foreground">
+                Click to select a different video
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+                <Upload className="h-6 w-6 text-primary" />
+              </div>
+              <div className="text-sm font-medium">
+                Browse and Select Video
+              </div>
+              <div className="text-xs text-muted-foreground">
+                MP4, MOV, AVI, WebM (max 500MB)
+              </div>
+              <div className="text-xs text-muted-foreground mt-1">
+                Video will upload automatically after selection
+              </div>
+            </>
+          )}
+        </div>
+      </label>
+    </div>
+  ), [videoUrl, isUploading, handleFileSelect]);
 
   if (isLoading || offerLoading) {
     return (
@@ -357,93 +507,125 @@ export default function CompanyOfferDetail() {
         </CardContent>
       </Card>
 
-      <Dialog open={showVideoDialog} onOpenChange={setShowVideoDialog}>
-        <DialogContent className="max-w-md">
+      <Dialog open={showVideoDialog} onOpenChange={handleDialogOpenChange}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Add Promotional Video</DialogTitle>
             <DialogDescription>
-              Upload a video that showcases your product or service
+              Select a video file to automatically upload (max 500MB), then fill in the details below
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <Label>Video File</Label>
-              <div className="mt-2">
-                <ObjectUploader
-                  maxNumberOfFiles={1}
-                  maxFileSize={524288000}
-                  onGetUploadParameters={handleGetUploadUrl}
-                  onComplete={handleUploadComplete}
-                >
-                  {videoUrl ? "Video Uploaded ✓" : "Upload Video"}
-                </ObjectUploader>
-              </div>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="video-upload">
+                Video File <span className="text-destructive">*</span>
+              </Label>
+              {VideoUploader}
+              {!videoUrl && !isUploading && (
+                <p className="text-xs text-muted-foreground">
+                  Select a video file to automatically upload, then fill in the details below
+                </p>
+              )}
               {videoUrl && (
-                <p className="text-xs text-muted-foreground mt-1">
-                  Video uploaded successfully
+                <p className="text-xs text-green-600 dark:text-green-400">
+                  ✓ Video uploaded successfully. Now fill in the details and click "Add Video"
                 </p>
               )}
             </div>
 
-            <div>
-              <Label htmlFor="video-title">Title *</Label>
+            <div className="space-y-2">
+              <Label htmlFor="video-title">
+                Video Title <span className="text-destructive">*</span>
+              </Label>
               <Input
                 id="video-title"
                 value={videoTitle}
                 onChange={(e) => setVideoTitle(e.target.value)}
-                placeholder="e.g., Product Demo"
+                placeholder="e.g., Product Demo, Tutorial, Review"
+                maxLength={100}
                 data-testid="input-video-title"
               />
+              <p className="text-xs text-muted-foreground">
+                {videoTitle.length}/100 characters
+              </p>
             </div>
 
-            <div>
+            <div className="space-y-2">
               <Label htmlFor="video-description">Description</Label>
               <Textarea
                 id="video-description"
                 value={videoDescription}
                 onChange={(e) => setVideoDescription(e.target.value)}
-                placeholder="Brief description of the video"
-                rows={3}
+                placeholder="Provide a brief description of what this video shows..."
+                rows={4}
+                maxLength={500}
                 data-testid="input-video-description"
               />
+              <p className="text-xs text-muted-foreground">
+                {videoDescription.length}/500 characters
+              </p>
             </div>
 
-            <div>
-              <Label htmlFor="creator-credit">Creator Credit</Label>
-              <Input
-                id="creator-credit"
-                value={creatorCredit}
-                onChange={(e) => setCreatorCredit(e.target.value)}
-                placeholder="e.g., @username"
-                data-testid="input-creator-credit"
-              />
-            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="creator-credit">Creator Credit</Label>
+                <Input
+                  id="creator-credit"
+                  value={creatorCredit}
+                  onChange={(e) => setCreatorCredit(e.target.value)}
+                  placeholder="@username or creator name"
+                  data-testid="input-creator-credit"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Optional: Credit the original creator
+                </p>
+              </div>
 
-            <div>
-              <Label htmlFor="original-platform">Original Platform</Label>
-              <Input
-                id="original-platform"
-                value={originalPlatform}
-                onChange={(e) => setOriginalPlatform(e.target.value)}
-                placeholder="e.g., TikTok, Instagram, YouTube"
-                data-testid="input-original-platform"
-              />
+              <div className="space-y-2">
+                <Label htmlFor="original-platform">Original Platform</Label>
+                <Input
+                  id="original-platform"
+                  value={originalPlatform}
+                  onChange={(e) => setOriginalPlatform(e.target.value)}
+                  placeholder="TikTok, Instagram, YouTube"
+                  data-testid="input-original-platform"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Optional: Where was this posted?
+                </p>
+              </div>
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="gap-2 sm:gap-0">
             <Button
               variant="outline"
-              onClick={() => setShowVideoDialog(false)}
+              onClick={() => handleDialogOpenChange(false)}
+              disabled={createVideoMutation.isPending}
               data-testid="button-cancel-video"
             >
               Cancel
             </Button>
             <Button
               onClick={handleSubmitVideo}
-              disabled={!videoUrl || !videoTitle || createVideoMutation.isPending}
+              disabled={!videoUrl || !videoTitle || isUploading || createVideoMutation.isPending}
               data-testid="button-submit-video"
             >
-              {createVideoMutation.isPending ? "Adding..." : "Add Video"}
+              {createVideoMutation.isPending ? (
+                <>
+                  <Upload className="h-4 w-4 mr-2 animate-pulse" />
+                  Adding Video...
+                </>
+              ) : isUploading ? (
+                <>
+                  <Upload className="h-4 w-4 mr-2 animate-pulse" />
+                  Uploading...
+                </>
+              ) : (
+                <>
+                  <Video className="h-4 w-4 mr-2" />
+                  Add Video
+                </>
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

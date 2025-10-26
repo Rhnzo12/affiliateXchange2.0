@@ -211,14 +211,16 @@ export function AppSidebar() {
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild isActive={location === '/payment-settings'} data-testid="nav-payment-settings">
-                  <Link href="/payment-settings">
-                    <DollarSign className="h-4 w-4" />
-                    <span>Payment Settings</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
+              {user?.role !== 'admin' && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={location === '/payment-settings'} data-testid="nav-payment-settings">
+                    <Link href="/payment-settings">
+                      <DollarSign className="h-4 w-4" />
+                      <span>Payment Settings</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

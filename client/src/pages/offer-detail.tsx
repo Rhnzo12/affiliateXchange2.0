@@ -29,7 +29,21 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Heart, Star, Play, CheckCircle2, DollarSign, Clock, MapPin, Users } from "lucide-react";
+import { Heart, Star, Play, CheckCircle2, DollarSign, Clock, MapPin, Users, Check } from "lucide-react";
+
+// Helper function to format commission display
+const formatCommission = (offer: any) => {
+  if (!offer) return "$0";
+  
+  if (offer.commissionAmount) {
+    return `$${offer.commissionAmount}`;
+  } else if (offer.commissionPercentage) {
+    return `${offer.commissionPercentage}%`;
+  } else if (offer.commissionRate) {
+    return `$${offer.commissionRate}`;
+  }
+  return "$0";
+};
 
 export default function OfferDetail() {
   const { toast } = useToast();
@@ -65,6 +79,64 @@ export default function OfferDetail() {
     queryKey: ["/api/favorites", offerId],
     enabled: !!offerId && isAuthenticated,
   });
+
+  // Check if user has already applied to this offer
+  const { data: applications } = useQuery<any[]>({
+    queryKey: ["/api/applications"],
+    enabled: isAuthenticated,
+  });
+
+  // Find if there's an existing application for this offer
+  const existingApplication = applications?.find(
+    app => app.offer?.id === offerId || app.offerId === offerId
+  );
+  const hasApplied = !!existingApplication;
+  const applicationStatus = existingApplication?.status;
+
+  // Get button text and state based on application status
+  const getApplyButtonConfig = () => {
+    if (!hasApplied) {
+      return {
+        text: "Apply Now",
+        disabled: false,
+        variant: "default" as const,
+        icon: null,
+      };
+    }
+
+    switch (applicationStatus) {
+      case "pending":
+        return {
+          text: "Application Pending",
+          disabled: true,
+          variant: "secondary" as const,
+          icon: <Clock className="h-4 w-4" />,
+        };
+      case "approved":
+        return {
+          text: "Application Approved",
+          disabled: true,
+          variant: "default" as const,
+          icon: <CheckCircle2 className="h-4 w-4" />,
+        };
+      case "active":
+        return {
+          text: "Active Campaign",
+          disabled: true,
+          variant: "default" as const,
+          icon: <Check className="h-4 w-4" />,
+        };
+      default:
+        return {
+          text: "Already Applied",
+          disabled: true,
+          variant: "secondary" as const,
+          icon: <Check className="h-4 w-4" />,
+        };
+    }
+  };
+
+  const buttonConfig = getApplyButtonConfig();
 
   const favoriteMutation = useMutation({
     mutationFn: async () => {
@@ -109,10 +181,11 @@ export default function OfferDetail() {
       });
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/applications"] });
       setShowApplyDialog(false);
       toast({
         title: "Application Submitted!",
-        description: "You'll hear back within 4 hours. Check My Applications for updates.",
+        description: "You'll hear back within 48 hours. Check My Applications for updates.",
       });
       setApplicationMessage("");
       setPreferredCommission("");
@@ -180,7 +253,7 @@ export default function OfferDetail() {
             )}
             <div>
               <h1 className="text-3xl font-bold">{offer.title}</h1>
-              <p className="text-muted-foreground">{offer.company?.tradeName}</p>
+              <p className="text-muted-foreground">{offer.company?.tradeName || "Company"}</p>
             </div>
           </div>
         </div>
@@ -213,18 +286,20 @@ export default function OfferDetail() {
               <CardTitle>About This Offer</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <p className="text-muted-foreground">{offer.fullDescription}</p>
+              <p className="text-muted-foreground whitespace-pre-wrap">
+                {offer.fullDescription || offer.description || offer.shortDescription || "No description available"}
+              </p>
               
               <div className="grid sm:grid-cols-2 gap-4 pt-4 border-t">
                 <div className="space-y-1">
                   <div className="text-sm text-muted-foreground">Commission</div>
                   <div className="text-2xl font-bold font-mono text-primary">
-                    ${offer.commissionAmount || offer.commissionPercentage + '%'}
+                    {formatCommission(offer)}
                   </div>
                 </div>
                 <div className="space-y-1">
                   <div className="text-sm text-muted-foreground">Commission Type</div>
-                  <Badge>{offer.commissionType.replace('_', ' ')}</Badge>
+                  <Badge>{offer.commissionType?.replace(/_/g, ' ') || 'Standard'}</Badge>
                 </div>
                 {offer.paymentSchedule && (
                   <div className="space-y-1">
@@ -324,14 +399,23 @@ export default function OfferDetail() {
               {offer.contentStyleRequirements && (
                 <div className="pt-4 border-t">
                   <div className="font-semibold mb-2">Content Style Requirements</div>
-                  <p className="text-muted-foreground">{offer.contentStyleRequirements}</p>
+                  <p className="text-muted-foreground whitespace-pre-wrap">{offer.contentStyleRequirements}</p>
                 </div>
               )}
               {offer.brandSafetyRequirements && (
                 <div className="pt-4 border-t">
                   <div className="font-semibold mb-2">Brand Safety Requirements</div>
-                  <p className="text-muted-foreground">{offer.brandSafetyRequirements}</p>
+                  <p className="text-muted-foreground whitespace-pre-wrap">{offer.brandSafetyRequirements}</p>
                 </div>
+              )}
+              {!offer.minimumFollowers && 
+               !offer.allowedPlatforms?.length && 
+               !offer.geographicRestrictions?.length && 
+               !offer.contentStyleRequirements && 
+               !offer.brandSafetyRequirements && (
+                <p className="text-center py-8 text-muted-foreground">
+                  No specific requirements listed
+                </p>
               )}
             </CardContent>
           </Card>
@@ -346,6 +430,7 @@ export default function OfferDetail() {
               <div className="text-center py-12">
                 <Star className="h-12 w-12 text-muted-foreground/50 mx-auto mb-4" />
                 <p className="text-muted-foreground">No reviews yet</p>
+                <p className="text-sm text-muted-foreground mt-1">Be the first to work with this offer and leave a review</p>
               </div>
             </CardContent>
           </Card>
@@ -354,11 +439,18 @@ export default function OfferDetail() {
 
       {/* Sticky Apply Button */}
       <div className="fixed bottom-0 left-0 right-0 border-t bg-background/95 backdrop-blur p-4 z-40">
-        <div className="max-w-7xl mx-auto flex justify-end">
+        <div className="max-w-7xl mx-auto flex flex-col items-end gap-2">
           <Dialog open={showApplyDialog} onOpenChange={setShowApplyDialog}>
             <DialogTrigger asChild>
-              <Button size="lg" className="gap-2" data-testid="button-apply">
-                Apply Now
+              <Button 
+                size="lg" 
+                className="gap-2" 
+                data-testid="button-apply"
+                disabled={buttonConfig.disabled}
+                variant={buttonConfig.variant}
+              >
+                {buttonConfig.icon}
+                {buttonConfig.text}
               </Button>
             </DialogTrigger>
             <DialogContent className="max-w-2xl">
@@ -427,6 +519,13 @@ export default function OfferDetail() {
               </DialogFooter>
             </DialogContent>
           </Dialog>
+          
+          {/* Show application date if user has already applied */}
+          {hasApplied && existingApplication?.createdAt && (
+            <Badge variant="secondary" className="text-xs">
+              Applied on {new Date(existingApplication.createdAt).toLocaleDateString()}
+            </Badge>
+          )}
         </div>
       </div>
 

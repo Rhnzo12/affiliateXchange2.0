@@ -3,7 +3,6 @@ import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { isUnauthorizedError } from "@/lib/authUtils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,7 +13,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 export default function Settings() {
   const { toast } = useToast();
-  const { isAuthenticated, isLoading, user } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const [bio, setBio] = useState("");
   const [youtubeUrl, setYoutubeUrl] = useState("");
   const [tiktokUrl, setTiktokUrl] = useState("");
@@ -22,19 +21,7 @@ export default function Settings() {
   const [youtubeFollowers, setYoutubeFollowers] = useState("");
   const [tiktokFollowers, setTiktokFollowers] = useState("");
   const [instagramFollowers, setInstagramFollowers] = useState("");
-
-  useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
-      toast({
-        title: "Unauthorized",
-        description: "You are logged out. Logging in again...",
-        variant: "destructive",
-      });
-      setTimeout(() => {
-        window.location.href = "/api/login";
-      }, 500);
-    }
-  }, [isAuthenticated, isLoading, toast]);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   const { data: profile } = useQuery<any>({
     queryKey: ["/api/profile"],
@@ -52,6 +39,37 @@ export default function Settings() {
       setInstagramFollowers(profile.instagramFollowers?.toString() || "");
     }
   }, [profile]);
+
+  // ✅ FIXED: This is the corrected logout function
+  const handleLogout = async () => {
+    try {
+      setIsLoggingOut(true);
+      
+      // Call logout endpoint with POST request
+      const response = await fetch("/api/auth/logout", {
+        method: "POST",
+        credentials: "include",
+      });
+
+      if (!response.ok) {
+        throw new Error("Logout failed");
+      }
+
+      // Clear all cached queries
+      queryClient.clear();
+      
+      // Redirect to login page
+      window.location.href = "/login";
+    } catch (error) {
+      console.error("Logout error:", error);
+      toast({
+        title: "Error",
+        description: "Failed to logout. Please try again.",
+        variant: "destructive",
+      });
+      setIsLoggingOut(false);
+    }
+  };
 
   const updateProfileMutation = useMutation({
     mutationFn: async () => {
@@ -73,30 +91,13 @@ export default function Settings() {
       });
     },
     onError: (error: Error) => {
-      if (isUnauthorizedError(error)) {
-        toast({
-          title: "Unauthorized",
-          description: "You are logged out. Logging in again...",
-          variant: "destructive",
-        });
-        setTimeout(() => {
-          window.location.href = "/api/login";
-        }, 500);
-        return;
-      }
       toast({
         title: "Error",
-        description: "Failed to update profile",
+        description: error.message || "Failed to update profile",
         variant: "destructive",
       });
     },
   });
-
-  if (isLoading) {
-    return <div className="flex items-center justify-center min-h-screen">
-      <div className="animate-pulse text-lg">Loading...</div>
-    </div>;
-  }
 
   return (
     <div className="space-y-6 max-w-2xl">
@@ -235,8 +236,13 @@ export default function Settings() {
               <div className="font-medium">Log Out</div>
               <div className="text-sm text-muted-foreground">Sign out of your account</div>
             </div>
-            <Button variant="outline" asChild data-testid="button-logout">
-              <a href="/api/logout">Log Out</a>
+            <Button 
+              variant="outline" 
+              onClick={handleLogout}
+              disabled={isLoggingOut}
+              data-testid="button-logout"
+            >
+              {isLoggingOut ? "Logging out..." : "Log Out"}
             </Button>
           </div>
         </CardContent>

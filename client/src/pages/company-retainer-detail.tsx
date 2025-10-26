@@ -5,7 +5,6 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -15,59 +14,46 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import {
-  DollarSign,
-  Video,
-  Calendar,
-  Check,
-  X,
-  ArrowLeft,
-  ExternalLink,
-  User,
-  Play,
-  AlertCircle,
-} from "lucide-react";
-import { Link } from "wouter";
-import { format } from "date-fns";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { DollarSign, Video, Calendar, Briefcase, CheckCircle, XCircle, Clock, ExternalLink } from "lucide-react";
 import { useState } from "react";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
+import { Link } from "wouter";
 
 export default function CompanyRetainerDetail() {
   const [, params] = useRoute("/company/retainers/:id");
-  const { toast } = useToast();
   const contractId = params?.id;
-  const [reviewNotes, setReviewNotes] = useState<Record<string, string>>({});
+  const { toast } = useToast();
+  const [selectedApplication, setSelectedApplication] = useState<any>(null);
+  const [approveDialogOpen, setApproveDialogOpen] = useState(false);
+  const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
 
-  const { data: contract, isLoading } = useQuery<any>({
-    queryKey: ["/api/retainer-contracts", contractId],
+  // Use the correct API endpoint - /api/retainer-contracts/:id (not /api/company/retainer-contracts/:id)
+  const { data: contract, isLoading, error } = useQuery<any>({
+    queryKey: [`/api/retainer-contracts/${contractId}`],
     enabled: !!contractId,
   });
 
+  // Use the correct API endpoint for applications
   const { data: applications } = useQuery<any[]>({
-    queryKey: ["/api/retainer-contracts", contractId, "applications"],
-    enabled: !!contractId,
-  });
-
-  const { data: deliverables } = useQuery<any[]>({
-    queryKey: ["/api/retainer-contracts", contractId, "deliverables"],
+    queryKey: [`/api/retainer-contracts/${contractId}/applications`],
     enabled: !!contractId,
   });
 
   const approveMutation = useMutation({
     mutationFn: async (applicationId: string) => {
-      return await apiRequest("POST", `/api/retainer-applications/${applicationId}/approve`, {});
+      return await apiRequest("PATCH", `/api/company/retainer-applications/${applicationId}/approve`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/retainer-contracts", contractId, "applications"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/retainer-contracts", contractId] });
+      queryClient.invalidateQueries({ queryKey: [`/api/retainer-contracts/${contractId}`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/retainer-contracts/${contractId}/applications`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/retainer-contracts"] });
       toast({
         title: "Application Approved",
         description: "The creator has been assigned to this retainer contract.",
       });
+      setApproveDialogOpen(false);
+      setSelectedApplication(null);
     },
     onError: (error: Error) => {
       toast({
@@ -80,14 +66,18 @@ export default function CompanyRetainerDetail() {
 
   const rejectMutation = useMutation({
     mutationFn: async (applicationId: string) => {
-      return await apiRequest("POST", `/api/retainer-applications/${applicationId}/reject`, {});
+      return await apiRequest("PATCH", `/api/company/retainer-applications/${applicationId}/reject`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/retainer-contracts", contractId, "applications"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/retainer-contracts/${contractId}`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/retainer-contracts/${contractId}/applications`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/retainer-contracts"] });
       toast({
         title: "Application Rejected",
         description: "The application has been rejected.",
       });
+      setRejectDialogOpen(false);
+      setSelectedApplication(null);
     },
     onError: (error: Error) => {
       toast({
@@ -98,666 +88,360 @@ export default function CompanyRetainerDetail() {
     },
   });
 
-  const approveDeliverableMutation = useMutation({
-    mutationFn: async ({ id, notes }: { id: string; notes?: string }) => {
-      return await apiRequest("POST", `/api/retainer-deliverables/${id}/approve`, {
-        reviewNotes: notes,
-      });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/retainer-contracts", contractId, "deliverables"] });
-      toast({
-        title: "Deliverable Approved",
-        description: "The video has been approved.",
-      });
-    },
-    onError: (error: Error) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to approve deliverable",
-        variant: "destructive",
-      });
-    },
-  });
+  const handleApprove = (application: any) => {
+    setSelectedApplication(application);
+    setApproveDialogOpen(true);
+  };
 
-  const requestRevisionMutation = useMutation({
-    mutationFn: async ({ id, notes }: { id: string; notes: string }) => {
-      return await apiRequest("POST", `/api/retainer-deliverables/${id}/request-revision`, {
-        reviewNotes: notes,
-      });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/retainer-contracts", contractId, "deliverables"] });
-      toast({
-        title: "Revision Requested",
-        description: "The creator has been notified to revise the video.",
-      });
-      setReviewNotes({});
-    },
-    onError: (error: Error) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to request revision",
-        variant: "destructive",
-      });
-    },
-  });
+  const handleReject = (application: any) => {
+    setSelectedApplication(application);
+    setRejectDialogOpen(true);
+  };
 
-  const rejectDeliverableMutation = useMutation({
-    mutationFn: async ({ id, notes }: { id: string; notes: string }) => {
-      return await apiRequest("POST", `/api/retainer-deliverables/${id}/reject`, {
-        reviewNotes: notes,
-      });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/retainer-contracts", contractId, "deliverables"] });
-      toast({
-        title: "Deliverable Rejected",
-        description: "The video has been rejected.",
-      });
-      setReviewNotes({});
-    },
-    onError: (error: Error) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to reject deliverable",
-        variant: "destructive",
-      });
-    },
-  });
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'pending':
+        return <Badge variant="secondary"><Clock className="h-3 w-3 mr-1" />Pending</Badge>;
+      case 'approved':
+        return <Badge className="bg-green-500 hover:bg-green-600"><CheckCircle className="h-3 w-3 mr-1" />Approved</Badge>;
+      case 'rejected':
+        return <Badge variant="destructive"><XCircle className="h-3 w-3 mr-1" />Rejected</Badge>;
+      default:
+        return <Badge variant="outline">{status}</Badge>;
+    }
+  };
 
   if (isLoading) {
-    return <div className="space-y-6">Loading...</div>;
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold">Loading...</h1>
+          <p className="text-muted-foreground">Fetching contract details...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="space-y-6">
+        <Card className="border-destructive">
+          <CardHeader>
+            <CardTitle className="text-destructive">Error Loading Contract</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              <p className="text-sm text-muted-foreground">
+                {(error as Error)?.message || "Failed to load contract"}
+              </p>
+              <Link href="/company/retainers">
+                <Button className="mt-4">Back to Retainers</Button>
+              </Link>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
   }
 
   if (!contract) {
-    return <div className="space-y-6">Contract not found</div>;
+    return (
+      <div className="space-y-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>Contract Not Found</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              <p className="text-muted-foreground">
+                The retainer contract you're looking for doesn't exist.
+              </p>
+              <Link href="/company/retainers">
+                <Button className="mt-4">Back to Retainers</Button>
+              </Link>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
   }
 
-  const getStatusBadgeVariant = (status: string) => {
-    switch (status) {
-      case "open":
-        return "default";
-      case "in_progress":
-        return "secondary";
-      case "completed":
-        return "outline";
-      case "cancelled":
-        return "destructive";
-      default:
-        return "secondary";
-    }
-  };
-
-  const getApplicationStatusBadgeVariant = (status: string) => {
-    switch (status) {
-      case "pending":
-        return "default";
-      case "approved":
-        return "outline";
-      case "rejected":
-        return "destructive";
-      default:
-        return "secondary";
-    }
-  };
-
-  const pendingApplications = applications?.filter((app: any) => app.status === "pending") || [];
-  const approvedApplications = applications?.filter((app: any) => app.status === "approved") || [];
-  const rejectedApplications = applications?.filter((app: any) => app.status === "rejected") || [];
-
-  const pendingDeliverables = deliverables?.filter((d: any) => d.status === "pending_review") || [];
-  const approvedDeliverables = deliverables?.filter((d: any) => d.status === "approved") || [];
-  const revisionDeliverables = deliverables?.filter((d: any) => d.status === "revision_requested") || [];
-  const rejectedDeliverables = deliverables?.filter((d: any) => d.status === "rejected") || [];
-
-  const getDeliverableStatusBadgeVariant = (status: string) => {
-    switch (status) {
-      case "pending_review":
-        return "default";
-      case "approved":
-        return "outline";
-      case "revision_requested":
-        return "secondary";
-      case "rejected":
-        return "destructive";
-      default:
-        return "secondary";
-    }
-  };
+  const isContractAssigned = contract.status === 'in_progress' || !!contract.assignedCreatorId;
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-4">
-        <Link href="/company/retainers">
-          <Button variant="ghost" size="icon" data-testid="button-back">
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-        </Link>
-        <div className="flex-1">
-          <div className="flex items-center gap-2 mb-1">
-            <h1 className="text-3xl font-bold" data-testid="heading-contract-title">
-              {contract.title}
-            </h1>
-            <Badge variant={getStatusBadgeVariant(contract.status)}>
-              {contract.status.replace("_", " ")}
-            </Badge>
-          </div>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold">{contract.title}</h1>
           <p className="text-muted-foreground">Retainer Contract Details</p>
         </div>
+        <Badge variant={isContractAssigned ? 'default' : 'secondary'}>
+          {isContractAssigned ? 'In Progress' : 'Open'}
+        </Badge>
       </div>
 
-      <div className="grid lg:grid-cols-3 gap-6">
-        <Card className="border-card-border">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Monthly Payment
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
+      <Card>
+        <CardHeader>
+          <CardTitle>Contract Details</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-muted-foreground">{contract.description}</p>
+
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="flex items-center gap-3">
-              <DollarSign className="h-8 w-8 text-primary" />
-              <div className="text-2xl font-bold">
-                ${parseFloat(contract.monthlyAmount).toLocaleString()}
+              <div className="h-10 w-10 rounded-md bg-primary/10 flex items-center justify-center shrink-0">
+                <DollarSign className="h-5 w-5 text-primary" />
               </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-card-border">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Videos Per Month
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center gap-3">
-              <Video className="h-8 w-8 text-primary" />
-              <div className="text-2xl font-bold">{contract.videosPerMonth}</div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-card-border">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Contract Duration
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center gap-3">
-              <Calendar className="h-8 w-8 text-primary" />
-              <div className="text-2xl font-bold">{contract.durationMonths} months</div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      <Tabs defaultValue="details" className="space-y-6">
-        <TabsList>
-          <TabsTrigger value="details">Details</TabsTrigger>
-          <TabsTrigger value="applications" data-testid="tab-applications">
-            Applications ({applications?.length || 0})
-          </TabsTrigger>
-          <TabsTrigger value="deliverables" data-testid="tab-deliverables">
-            Deliverables ({deliverables?.length || 0})
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="details" className="space-y-6">
-          <Card className="border-card-border">
-            <CardHeader>
-              <CardTitle>Contract Information</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
               <div>
-                <h4 className="font-semibold mb-2">Description</h4>
-                <p className="text-muted-foreground">{contract.description}</p>
-              </div>
-
-              <div className="grid sm:grid-cols-2 gap-4 pt-4 border-t">
-                <div>
-                  <h4 className="font-semibold mb-1">Required Platform</h4>
-                  <p className="text-muted-foreground">{contract.requiredPlatform}</p>
-                </div>
-                {contract.minimumFollowers && (
-                  <div>
-                    <h4 className="font-semibold mb-1">Minimum Followers</h4>
-                    <p className="text-muted-foreground">
-                      {contract.minimumFollowers.toLocaleString()}
-                    </p>
-                  </div>
-                )}
-              </div>
-
-              {contract.platformAccountDetails && (
-                <div className="pt-4 border-t">
-                  <h4 className="font-semibold mb-2">Platform Account Details</h4>
-                  <p className="text-muted-foreground">{contract.platformAccountDetails}</p>
-                </div>
-              )}
-
-              {contract.contentGuidelines && (
-                <div className="pt-4 border-t">
-                  <h4 className="font-semibold mb-2">Content Guidelines</h4>
-                  <p className="text-muted-foreground">{contract.contentGuidelines}</p>
-                </div>
-              )}
-
-              {contract.brandSafetyRequirements && (
-                <div className="pt-4 border-t">
-                  <h4 className="font-semibold mb-2">Brand Safety Requirements</h4>
-                  <p className="text-muted-foreground">{contract.brandSafetyRequirements}</p>
-                </div>
-              )}
-
-              {contract.niches && contract.niches.length > 0 && (
-                <div className="pt-4 border-t">
-                  <h4 className="font-semibold mb-2">Target Niches</h4>
-                  <div className="flex gap-2 flex-wrap">
-                    {contract.niches.map((niche: string, index: number) => (
-                      <Badge key={index} variant="outline">
-                        {niche}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="applications" className="space-y-6">
-          {pendingApplications.length > 0 && (
-            <div className="space-y-4">
-              <h3 className="font-semibold">Pending Applications ({pendingApplications.length})</h3>
-              {pendingApplications.map((app: any) => (
-                <Card key={app.id} className="border-card-border" data-testid={`application-card-${app.id}`}>
-                  <CardHeader>
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex items-center gap-3">
-                        <Avatar>
-                          <AvatarImage src={app.creator?.avatarUrl} />
-                          <AvatarFallback>
-                            {app.creator?.username?.[0]?.toUpperCase() || "C"}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div>
-                          <CardTitle className="text-base">
-                            {app.creator?.username || "Unknown Creator"}
-                          </CardTitle>
-                          <p className="text-sm text-muted-foreground">
-                            Applied {format(new Date(app.createdAt), "MMM d, yyyy")}
-                          </p>
-                        </div>
-                      </div>
-                      <Badge variant={getApplicationStatusBadgeVariant(app.status)}>
-                        {app.status}
-                      </Badge>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div>
-                      <h4 className="font-semibold text-sm mb-2">Message</h4>
-                      <p className="text-sm text-muted-foreground">{app.message}</p>
-                    </div>
-
-                    {app.portfolioLinks && app.portfolioLinks.length > 0 && (
-                      <div>
-                        <h4 className="font-semibold text-sm mb-2">Portfolio Links</h4>
-                        <div className="flex flex-col gap-1">
-                          {app.portfolioLinks.map((link: string, index: number) => (
-                            <a
-                              key={index}
-                              href={link}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-sm text-primary hover:underline flex items-center gap-1"
-                            >
-                              <ExternalLink className="h-3 w-3" />
-                              {link}
-                            </a>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {app.proposedStartDate && (
-                      <div>
-                        <h4 className="font-semibold text-sm mb-1">Proposed Start Date</h4>
-                        <p className="text-sm text-muted-foreground">
-                          {format(new Date(app.proposedStartDate), "MMMM d, yyyy")}
-                        </p>
-                      </div>
-                    )}
-
-                    <div className="flex gap-2 pt-4 border-t">
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button
-                            variant="default"
-                            className="flex-1"
-                            data-testid={`button-approve-${app.id}`}
-                          >
-                            <Check className="h-4 w-4 mr-2" />
-                            Approve
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Approve Application?</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              This will assign {app.creator?.username} to the retainer contract and change the status to "In Progress".
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Cancel</AlertDialogCancel>
-                            <AlertDialogAction onClick={() => approveMutation.mutate(app.id)}>
-                              Approve
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button
-                            variant="outline"
-                            className="flex-1"
-                            data-testid={`button-reject-${app.id}`}
-                          >
-                            <X className="h-4 w-4 mr-2" />
-                            Reject
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Reject Application?</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              This will reject the application from {app.creator?.username}.
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Cancel</AlertDialogCancel>
-                            <AlertDialogAction
-                              onClick={() => rejectMutation.mutate(app.id)}
-                              className="bg-destructive hover:bg-destructive/90"
-                            >
-                              Reject
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
-
-          {approvedApplications.length > 0 && (
-            <div className="space-y-4">
-              <h3 className="font-semibold">Approved ({approvedApplications.length})</h3>
-              {approvedApplications.map((app: any) => (
-                <Card key={app.id} className="border-card-border">
-                  <CardContent className="p-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <Avatar>
-                          <AvatarImage src={app.creator?.avatarUrl} />
-                          <AvatarFallback>
-                            {app.creator?.username?.[0]?.toUpperCase() || "C"}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div>
-                          <p className="font-semibold">{app.creator?.username}</p>
-                          <p className="text-sm text-muted-foreground">
-                            Approved {format(new Date(app.updatedAt), "MMM d, yyyy")}
-                          </p>
-                        </div>
-                      </div>
-                      <Badge variant="outline">Approved</Badge>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
-
-          {rejectedApplications.length > 0 && (
-            <div className="space-y-4">
-              <h3 className="font-semibold text-muted-foreground">
-                Rejected ({rejectedApplications.length})
-              </h3>
-              {rejectedApplications.map((app: any) => (
-                <Card key={app.id} className="border-card-border opacity-60">
-                  <CardContent className="p-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <Avatar>
-                          <AvatarImage src={app.creator?.avatarUrl} />
-                          <AvatarFallback>
-                            {app.creator?.username?.[0]?.toUpperCase() || "C"}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div>
-                          <p className="font-semibold">{app.creator?.username}</p>
-                          <p className="text-sm text-muted-foreground">
-                            Rejected {format(new Date(app.updatedAt), "MMM d, yyyy")}
-                          </p>
-                        </div>
-                      </div>
-                      <Badge variant="destructive">Rejected</Badge>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
-
-          {!applications || applications.length === 0 && (
-            <Card className="border-card-border">
-              <CardContent className="p-12 text-center">
-                <User className="h-12 w-12 text-muted-foreground/50 mx-auto mb-4" />
-                <p className="text-muted-foreground">No applications received yet</p>
-              </CardContent>
-            </Card>
-          )}
-        </TabsContent>
-
-        <TabsContent value="deliverables" className="space-y-6">
-          {pendingDeliverables.length > 0 && (
-            <div className="space-y-4">
-              <h3 className="font-semibold">Pending Review ({pendingDeliverables.length})</h3>
-              {pendingDeliverables.map((deliverable: any) => (
-                <Card key={deliverable.id} className="border-card-border" data-testid={`deliverable-card-${deliverable.id}`}>
-                  <CardHeader>
-                    <div className="flex items-start justify-between gap-4">
-                      <div>
-                        <CardTitle className="text-base">{deliverable.title}</CardTitle>
-                        <p className="text-sm text-muted-foreground">
-                          Month {deliverable.monthNumber} - Video #{deliverable.videoNumber}
-                        </p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Submitted {format(new Date(deliverable.submittedAt), "MMM d, yyyy")}
-                        </p>
-                      </div>
-                      <Badge variant={getDeliverableStatusBadgeVariant(deliverable.status)}>
-                        Pending Review
-                      </Badge>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    {deliverable.description && (
-                      <p className="text-sm text-muted-foreground">{deliverable.description}</p>
-                    )}
-
-                    <div className="flex gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => window.open(deliverable.videoUrl, "_blank")}
-                        data-testid={`button-view-video-${deliverable.id}`}
-                      >
-                        <Play className="h-3 w-3 mr-1" />
-                        View Video
-                      </Button>
-                      {deliverable.platformUrl && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => window.open(deliverable.platformUrl, "_blank")}
-                        >
-                          <ExternalLink className="h-3 w-3 mr-1" />
-                          View on Platform
-                        </Button>
-                      )}
-                    </div>
-
-                    <div className="pt-4 border-t space-y-3">
-                      <label className="text-sm font-semibold">Review Notes (Optional)</label>
-                      <Textarea
-                        placeholder="Add feedback or notes about this video..."
-                        rows={2}
-                        value={reviewNotes[deliverable.id] || ""}
-                        onChange={(e) =>
-                          setReviewNotes({ ...reviewNotes, [deliverable.id]: e.target.value })
-                        }
-                        data-testid={`input-review-notes-${deliverable.id}`}
-                      />
-                      <div className="flex gap-2">
-                        <Button
-                          variant="default"
-                          size="sm"
-                          onClick={() =>
-                            approveDeliverableMutation.mutate({
-                              id: deliverable.id,
-                              notes: reviewNotes[deliverable.id],
-                            })
-                          }
-                          data-testid={`button-approve-deliverable-${deliverable.id}`}
-                        >
-                          <Check className="h-3 w-3 mr-1" />
-                          Approve
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            if (!reviewNotes[deliverable.id]) {
-                              toast({
-                                title: "Notes Required",
-                                description: "Please add notes explaining what needs to be revised.",
-                                variant: "destructive",
-                              });
-                              return;
-                            }
-                            requestRevisionMutation.mutate({
-                              id: deliverable.id,
-                              notes: reviewNotes[deliverable.id],
-                            });
-                          }}
-                          data-testid={`button-request-revision-${deliverable.id}`}
-                        >
-                          <AlertCircle className="h-3 w-3 mr-1" />
-                          Request Revision
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            if (!reviewNotes[deliverable.id]) {
-                              toast({
-                                title: "Notes Required",
-                                description: "Please add notes explaining why this is being rejected.",
-                                variant: "destructive",
-                              });
-                              return;
-                            }
-                            rejectDeliverableMutation.mutate({
-                              id: deliverable.id,
-                              notes: reviewNotes[deliverable.id],
-                            });
-                          }}
-                          data-testid={`button-reject-deliverable-${deliverable.id}`}
-                        >
-                          <X className="h-3 w-3 mr-1" />
-                          Reject
-                        </Button>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
-
-          {approvedDeliverables.length > 0 && (
-            <div className="space-y-4">
-              <h3 className="font-semibold">Approved ({approvedDeliverables.length})</h3>
-              <div className="grid sm:grid-cols-2 gap-4">
-                {approvedDeliverables.map((deliverable: any) => (
-                  <Card key={deliverable.id} className="border-card-border">
-                    <CardContent className="p-4 space-y-2">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex-1">
-                          <p className="font-semibold text-sm line-clamp-1">{deliverable.title}</p>
-                          <p className="text-xs text-muted-foreground">
-                            Month {deliverable.monthNumber} - Video #{deliverable.videoNumber}
-                          </p>
-                        </div>
-                        <Badge variant="outline" className="shrink-0">Approved</Badge>
-                      </div>
-                      {deliverable.reviewedAt && (
-                        <p className="text-xs text-muted-foreground">
-                          {format(new Date(deliverable.reviewedAt), "MMM d, yyyy")}
-                        </p>
-                      )}
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {revisionDeliverables.length > 0 && (
-            <div className="space-y-4">
-              <h3 className="font-semibold">Revision Requested ({revisionDeliverables.length})</h3>
-              <div className="grid sm:grid-cols-2 gap-4">
-                {revisionDeliverables.map((deliverable: any) => (
-                  <Card key={deliverable.id} className="border-card-border">
-                    <CardContent className="p-4 space-y-2">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex-1">
-                          <p className="font-semibold text-sm line-clamp-1">{deliverable.title}</p>
-                          <p className="text-xs text-muted-foreground">
-                            Month {deliverable.monthNumber} - Video #{deliverable.videoNumber}
-                          </p>
-                        </div>
-                        <Badge variant="secondary" className="shrink-0">Revision</Badge>
-                      </div>
-                      {deliverable.reviewNotes && (
-                        <p className="text-xs text-muted-foreground">{deliverable.reviewNotes}</p>
-                      )}
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {!deliverables || deliverables.length === 0 && (
-            <Card className="border-card-border">
-              <CardContent className="p-12 text-center">
-                <Video className="h-12 w-12 text-muted-foreground/50 mx-auto mb-4" />
-                <p className="text-muted-foreground">
-                  No deliverables submitted yet
+                <p className="text-sm text-muted-foreground">Monthly Payment</p>
+                <p className="font-semibold">
+                  ${parseFloat(contract.monthlyAmount).toLocaleString()}
                 </p>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-md bg-primary/10 flex items-center justify-center shrink-0">
+                <Video className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Videos/Month</p>
+                <p className="font-semibold">{contract.videosPerMonth}</p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-md bg-primary/10 flex items-center justify-center shrink-0">
+                <Calendar className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Duration</p>
+                <p className="font-semibold">{contract.durationMonths} months</p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-md bg-primary/10 flex items-center justify-center shrink-0">
+                <Briefcase className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Platform</p>
+                <p className="font-semibold">{contract.requiredPlatform}</p>
+              </div>
+            </div>
+          </div>
+
+          {contract.contentGuidelines && (
+            <div className="pt-4 border-t">
+              <h4 className="font-semibold text-sm mb-2">Content Guidelines</h4>
+              <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+                {contract.contentGuidelines}
+              </p>
+            </div>
           )}
-        </TabsContent>
-      </Tabs>
+
+          {contract.assignedCreator && (
+            <div className="pt-4 border-t">
+              <h4 className="font-semibold text-sm mb-2">Assigned Creator</h4>
+              <div className="flex items-center gap-3">
+                <Avatar>
+                  <AvatarFallback>
+                    {contract.assignedCreator.firstName?.[0]}{contract.assignedCreator.lastName?.[0]}
+                  </AvatarFallback>
+                </Avatar>
+                <div>
+                  <p className="font-medium">
+                    {contract.assignedCreator.firstName} {contract.assignedCreator.lastName}
+                  </p>
+                  <p className="text-sm text-muted-foreground">@{contract.assignedCreator.username}</p>
+                </div>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle>Applications</CardTitle>
+            <Badge variant="outline">
+              {applications?.length || 0} Application{applications?.length !== 1 ? 's' : ''}
+            </Badge>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {!applications || applications.length === 0 ? (
+            <div className="text-center py-12">
+              <p className="text-muted-foreground">No applications yet</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {applications.map((application: any) => (
+                <Card key={application.id} className="border-card-border">
+                  <CardContent className="pt-6">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex items-start gap-4 flex-1">
+                        <Avatar className="h-12 w-12">
+                          <AvatarFallback>
+                            {application.creator?.firstName?.[0]}{application.creator?.lastName?.[0]}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1 space-y-3">
+                          <div>
+                            <div className="flex items-center gap-2 mb-1">
+                              <h4 className="font-semibold">
+                                {application.creator?.firstName} {application.creator?.lastName}
+                              </h4>
+                              {getStatusBadge(application.status)}
+                            </div>
+                            <p className="text-sm text-muted-foreground">
+                              @{application.creator?.username}
+                            </p>
+                          </div>
+
+                          <div>
+                            <h5 className="text-sm font-medium mb-1">Message</h5>
+                            <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+                              {application.message}
+                            </p>
+                          </div>
+
+                          {application.portfolioLinks && application.portfolioLinks.length > 0 && (
+                            <div>
+                              <h5 className="text-sm font-medium mb-2">Portfolio Links</h5>
+                              <div className="flex flex-wrap gap-2">
+                                {application.portfolioLinks.map((link: string, index: number) => (
+                                  <a
+                                    key={index}
+                                    href={link}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-sm text-primary hover:underline inline-flex items-center gap-1"
+                                  >
+                                    <ExternalLink className="h-3 w-3" />
+                                    Link {index + 1}
+                                  </a>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {application.proposedStartDate && (
+                            <div>
+                              <h5 className="text-sm font-medium">Proposed Start Date</h5>
+                              <p className="text-sm text-muted-foreground">
+                                {new Date(application.proposedStartDate).toLocaleDateString()}
+                              </p>
+                            </div>
+                          )}
+
+                          <div className="flex gap-2 pt-2">
+                            {application.status === 'pending' && (
+                              <>
+                                <Button
+                                  onClick={() => handleApprove(application)}
+                                  size="sm"
+                                  disabled={isContractAssigned}
+                                  className="bg-green-500 hover:bg-green-600"
+                                >
+                                  <CheckCircle className="h-4 w-4 mr-2" />
+                                  Approve
+                                </Button>
+                                <Button
+                                  onClick={() => handleReject(application)}
+                                  variant="destructive"
+                                  size="sm"
+                                  disabled={isContractAssigned}
+                                >
+                                  <XCircle className="h-4 w-4 mr-2" />
+                                  Reject
+                                </Button>
+                              </>
+                            )}
+                            {application.status === 'approved' && (
+                              <Button
+                                disabled
+                                size="sm"
+                                className="bg-green-500"
+                              >
+                                <CheckCircle className="h-4 w-4 mr-2" />
+                                Approved
+                              </Button>
+                            )}
+                            {application.status === 'rejected' && (
+                              <Button
+                                disabled
+                                variant="destructive"
+                                size="sm"
+                              >
+                                <XCircle className="h-4 w-4 mr-2" />
+                                Rejected
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Approve Confirmation Dialog */}
+      <AlertDialog open={approveDialogOpen} onOpenChange={setApproveDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Approve Application</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to approve this application? This will assign{" "}
+              <span className="font-semibold">
+                {selectedApplication?.creator?.firstName} {selectedApplication?.creator?.lastName}
+              </span>{" "}
+              to this retainer contract and change the contract status to "In Progress".
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => approveMutation.mutate(selectedApplication?.id)}
+              disabled={approveMutation.isPending}
+              className="bg-green-500 hover:bg-green-600"
+            >
+              {approveMutation.isPending ? "Approving..." : "Approve Application"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Reject Confirmation Dialog */}
+      <AlertDialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Reject Application</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to reject this application from{" "}
+              <span className="font-semibold">
+                {selectedApplication?.creator?.firstName} {selectedApplication?.creator?.lastName}
+              </span>
+              ? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => rejectMutation.mutate(selectedApplication?.id)}
+              disabled={rejectMutation.isPending}
+              className="bg-destructive hover:bg-destructive/90"
+            >
+              {rejectMutation.isPending ? "Rejecting..." : "Reject Application"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

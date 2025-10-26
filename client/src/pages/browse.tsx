@@ -41,6 +41,18 @@ const COMMISSION_TYPES = [
   { value: "hybrid", label: "Hybrid" },
 ];
 
+// Helper function to format commission display
+const formatCommission = (offer: any) => {
+  if (offer.commissionAmount) {
+    return `$${offer.commissionAmount}`;
+  } else if (offer.commissionPercentage) {
+    return `${offer.commissionPercentage}%`;
+  } else if (offer.commissionRate) {
+    return `$${offer.commissionRate}`;
+  }
+  return "$0";
+};
+
 export default function Browse() {
   const { toast } = useToast();
   const { isAuthenticated, isLoading } = useAuth();
@@ -52,16 +64,9 @@ export default function Browse() {
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
-      toast({
-        title: "Unauthorized",
-        description: "You are logged out. Logging in again...",
-        variant: "destructive",
-      });
-      setTimeout(() => {
-        window.location.href = "/api/login";
-      }, 500);
+      window.location.href = "/login";
     }
-  }, [isAuthenticated, isLoading, toast]);
+  }, [isAuthenticated, isLoading]);
 
   const { data: offers, isLoading: offersLoading } = useQuery<any[]>({
     queryKey: ["/api/offers", { search: searchTerm, niches: selectedNiches, commissionType, sortBy }],
@@ -302,32 +307,34 @@ export default function Browse() {
                     </button>
                   </div>
 
-                <CardContent className="p-4 space-y-3">
-                  <div className="flex items-start justify-between gap-2">
-                    <h3 className="font-semibold line-clamp-1 flex-1">{offer.title}</h3>
-                    {offer.company?.logoUrl && (
-                      <img src={offer.company.logoUrl} alt={offer.company.tradeName} className="h-8 w-8 rounded-full object-cover" />
-                    )}
-                  </div>
-
-                  <p className="text-sm text-muted-foreground line-clamp-2">{offer.shortDescription}</p>
-
-                  <div className="flex flex-wrap gap-1">
-                    <Badge variant="secondary" className="text-xs">{offer.primaryNiche}</Badge>
-                  </div>
-
-                  <div className="flex items-center justify-between pt-2 border-t">
-                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                      <Star className="h-3 w-3 fill-primary text-primary" />
-                      <span>{offer.company?.averageRating?.toFixed(1) || '5.0'}</span>
+                  <CardContent className="p-4 space-y-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <h3 className="font-semibold line-clamp-1 flex-1">{offer.title}</h3>
+                      {offer.company?.logoUrl && (
+                        <img src={offer.company.logoUrl} alt={offer.company.tradeName} className="h-8 w-8 rounded-full object-cover" />
+                      )}
                     </div>
-                    <div className="font-mono font-semibold text-primary">
-                      ${offer.commissionAmount || offer.commissionPercentage + '%'}
+
+                    <p className="text-sm text-muted-foreground line-clamp-2">{offer.shortDescription}</p>
+
+                    <div className="flex flex-wrap gap-1">
+                      {offer.primaryNiche && (
+                        <Badge variant="secondary" className="text-xs">{offer.primaryNiche}</Badge>
+                      )}
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </Link>
+
+                    <div className="flex items-center justify-between pt-2 border-t">
+                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                        <Star className="h-3 w-3 fill-primary text-primary" />
+                        <span>{offer.company?.averageRating?.toFixed(1) || '5.0'}</span>
+                      </div>
+                      <div className="font-mono font-semibold text-primary">
+                        {formatCommission(offer)}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </Link>
             );
           })}
         </div>

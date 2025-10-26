@@ -1,4 +1,4 @@
-import { Switch, Route } from "wouter";
+import { Switch, Route, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -38,18 +38,34 @@ import Onboarding from "@/pages/onboarding";
 import Login from "@/pages/login";
 import Register from "@/pages/register";
 
-function Router() {
+// Public routes that don't require authentication
+function PublicRouter() {
+  return (
+    <Switch>
+      <Route path="/" component={Landing} />
+      <Route path="/login" component={Login} />
+      <Route path="/register" component={Register} />
+      <Route component={Landing} />
+    </Switch>
+  );
+}
+
+// Protected routes that require authentication
+function ProtectedRouter() {
   const { isAuthenticated, isLoading, user } = useAuth();
 
-  // Show landing, login, or register pages while loading or not authenticated
-  if (isLoading || !isAuthenticated) {
+  // Redirect to login if not authenticated
+  if (!isLoading && !isAuthenticated) {
+    window.location.href = "/login";
+    return null;
+  }
+
+  // Show loading state
+  if (isLoading) {
     return (
-      <Switch>
-        <Route path="/" component={Landing} />
-        <Route path="/login" component={Login} />
-        <Route path="/register" component={Register} />
-        <Route component={Landing} />
-      </Switch>
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-pulse text-lg">Loading...</div>
+      </div>
     );
   }
 
@@ -133,6 +149,44 @@ function Router() {
       </div>
     </SidebarProvider>
   );
+}
+
+function Router() {
+  const [location] = useLocation();
+  const { isAuthenticated, isLoading } = useAuth();
+
+  // Define public routes
+  const publicRoutes = ['/login', '/register'];
+  const isPublicRoute = publicRoutes.includes(location);
+
+  // While loading, show a loading state
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-pulse text-lg">Loading...</div>
+      </div>
+    );
+  }
+
+  // ✅ FIX: Check authentication first before routing
+  // If authenticated, always show protected router (even for "/" route)
+  if (isAuthenticated) {
+    return <ProtectedRouter />;
+  }
+
+  // If not authenticated and on public route, show public router
+  if (isPublicRoute) {
+    return <PublicRouter />;
+  }
+
+  // If not authenticated and on "/" show landing
+  if (location === '/') {
+    return <PublicRouter />;
+  }
+
+  // Otherwise redirect to login
+  window.location.href = "/login";
+  return null;
 }
 
 function App() {

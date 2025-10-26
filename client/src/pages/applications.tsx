@@ -16,6 +16,20 @@ const STATUS_COLORS: Record<string, any> = {
   completed: { variant: "secondary" as const, icon: CheckCircle2 },
 };
 
+// Helper function to format commission display
+const formatCommission = (offer: any) => {
+  if (!offer) return "$0";
+  
+  if (offer.commissionAmount) {
+    return `$${offer.commissionAmount}`;
+  } else if (offer.commissionPercentage) {
+    return `${offer.commissionPercentage}%`;
+  } else if (offer.commissionRate) {
+    return `$${offer.commissionRate}`;
+  }
+  return "$0";
+};
+
 export default function Applications() {
   const { toast } = useToast();
   const { isAuthenticated, isLoading } = useAuth();
@@ -23,16 +37,9 @@ export default function Applications() {
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
-      toast({
-        title: "Unauthorized",
-        description: "You are logged out. Logging in again...",
-        variant: "destructive",
-      });
-      setTimeout(() => {
-        window.location.href = "/api/login";
-      }, 500);
+      window.location.href = "/login";
     }
-  }, [isAuthenticated, isLoading, toast]);
+  }, [isAuthenticated, isLoading]);
 
   const { data: applications } = useQuery<any[]>({
     queryKey: ["/api/applications"],
@@ -124,11 +131,11 @@ export default function Applications() {
                           <div className="space-y-1">
                             <Link href={`/offers/${application.offer?.id}`}>
                               <h3 className="font-semibold text-lg hover:text-primary cursor-pointer">
-                                {application.offer?.title}
+                                {application.offer?.title || "Untitled Offer"}
                               </h3>
                             </Link>
                             <p className="text-sm text-muted-foreground">
-                              {application.offer?.company?.tradeName}
+                              {application.offer?.company?.tradeName || "Company"}
                             </p>
                           </div>
                           <Badge {...STATUS_COLORS[application.status]} className="gap-1">
@@ -147,13 +154,13 @@ export default function Applications() {
                           <div>
                             <div className="text-muted-foreground">Commission</div>
                             <div className="font-medium font-mono">
-                              ${application.offer?.commissionAmount || application.offer?.commissionPercentage + '%'}
+                              {formatCommission(application.offer)}
                             </div>
                           </div>
                           <div>
                             <div className="text-muted-foreground">Type</div>
                             <Badge variant="secondary" className="mt-1">
-                              {application.offer?.commissionType?.replace('_', ' ')}
+                              {application.offer?.commissionType?.replace(/_/g, ' ') || 'Standard'}
                             </Badge>
                           </div>
                         </div>

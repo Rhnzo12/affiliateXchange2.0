@@ -53,6 +53,7 @@ export default function CompanyOfferCreate() {
   const createOfferMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
       // Build payload that exactly matches createOfferSchema
+      // FIXED: Keep commission values as STRINGS (the API expects strings, not numbers)
       const payload: any = {
         title: data.title,
         productName: data.productName,
@@ -61,9 +62,16 @@ export default function CompanyOfferCreate() {
         primaryNiche: data.primaryNiche,
         productUrl: data.productUrl,
         commissionType: data.commissionType,
-        commissionPercentage: data.commissionType === "per_sale" && data.commissionRate ? data.commissionRate : null,
-        commissionAmount: data.commissionType !== "per_sale" && data.commissionAmount ? data.commissionAmount : null,
+        commissionPercentage: data.commissionType === "per_sale" && data.commissionRate 
+          ? data.commissionRate  // Keep as string
+          : null,
+        commissionAmount: data.commissionType !== "per_sale" && data.commissionAmount 
+          ? data.commissionAmount  // Keep as string
+          : null,
+        status: data.status,
       };
+      
+      console.log("Sending payload:", payload); // Debug log
       
       return await apiRequest("POST", "/api/offers", payload);
     },
@@ -75,6 +83,7 @@ export default function CompanyOfferCreate() {
       setLocation("/company/offers");
     },
     onError: (error: any) => {
+      console.error("Error creating offer:", error); // Debug log
       toast({
         title: "Error",
         description: error.message || "Failed to create offer",
@@ -141,14 +150,20 @@ export default function CompanyOfferCreate() {
       return;
     }
 
-    // Validate URL format
-    if (formData.productUrl.trim() && !formData.productUrl.match(/^https?:\/\/.+/i) && !formData.productUrl.includes('.')) {
-      toast({
-        title: "Validation Error",
-        description: "Please enter a valid URL (e.g., https://example.com or example.com)",
-        variant: "destructive",
-      });
-      return;
+    // Validate URL format and auto-add https:// if missing
+    let productUrl = formData.productUrl.trim();
+    if (!productUrl.match(/^https?:\/\//i)) {
+      if (productUrl.includes('.')) {
+        productUrl = 'https://' + productUrl;
+        setFormData({ ...formData, productUrl: productUrl });
+      } else {
+        toast({
+          title: "Validation Error",
+          description: "Please enter a valid URL (e.g., https://example.com or example.com)",
+          variant: "destructive",
+        });
+        return;
+      }
     }
 
     if (formData.commissionType === "per_sale" && !formData.commissionRate) {

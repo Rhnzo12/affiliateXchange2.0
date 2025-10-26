@@ -11,7 +11,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import {
   Form,
@@ -24,7 +23,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { DollarSign, Video, Calendar, Briefcase, Send } from "lucide-react";
+import { DollarSign, Video, Calendar, Briefcase, Send, CheckCircle, XCircle, Clock } from "lucide-react";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -74,6 +73,7 @@ export default function CreatorRetainers() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/creator/retainer-applications"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/retainer-contracts"] });
       toast({
         title: "Application Submitted",
         description: "Your retainer application has been sent to the company.",
@@ -95,8 +95,64 @@ export default function CreatorRetainers() {
     applyMutation.mutate(data);
   };
 
-  const hasApplied = (contractId: string) => {
-    return myApplications?.some((app: any) => app.contractId === contractId);
+  // Get application for a specific contract
+  const getApplication = (contractId: string) => {
+    return myApplications?.find((app: any) => app.contractId === contractId);
+  };
+
+  // Check if user can apply (no application or rejected)
+  const canApply = (contractId: string) => {
+    const application = getApplication(contractId);
+    if (!application) return true;
+    // Can reapply if rejected
+    return application.status === 'rejected';
+  };
+
+  // Get button text, badge, and icon based on application status
+  const getApplicationStatus = (contractId: string) => {
+    const application = getApplication(contractId);
+    if (!application) return { 
+      badge: null, 
+      buttonText: 'Apply Now', 
+      disabled: false,
+      variant: 'default' as const,
+      icon: Send
+    };
+    
+    switch (application.status) {
+      case 'pending':
+        return { 
+          badge: 'Pending Review', 
+          buttonText: 'Application Pending', 
+          disabled: true,
+          variant: 'secondary' as const,
+          icon: Clock
+        };
+      case 'approved':
+        return { 
+          badge: 'Approved ✓', 
+          buttonText: 'Application Approved', 
+          disabled: true,
+          variant: 'default' as const,
+          icon: CheckCircle
+        };
+      case 'rejected':
+        return { 
+          badge: 'Not Selected', 
+          buttonText: 'Apply Again', 
+          disabled: false,
+          variant: 'destructive' as const,
+          icon: Send
+        };
+      default:
+        return { 
+          badge: 'Applied', 
+          buttonText: 'Applied', 
+          disabled: true,
+          variant: 'secondary' as const,
+          icon: Clock
+        };
+    }
   };
 
   if (isLoading) {
@@ -134,7 +190,10 @@ export default function CreatorRetainers() {
       ) : (
         <div className="grid gap-6">
           {contracts?.map((contract: any) => {
-            const applied = hasApplied(contract.id);
+            const applicationStatus = getApplicationStatus(contract.id);
+            const allowApply = canApply(contract.id);
+            const StatusIcon = applicationStatus.icon;
+            
             return (
               <Card
                 key={contract.id}
@@ -144,12 +203,27 @@ export default function CreatorRetainers() {
                 <CardHeader>
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-2">
+                      <div className="flex items-center gap-2 mb-2 flex-wrap">
                         <CardTitle className="text-xl" data-testid={`text-retainer-title-${contract.id}`}>
                           {contract.title}
                         </CardTitle>
-                        {applied && (
-                          <Badge variant="secondary">Applied</Badge>
+                        {applicationStatus.badge && (
+                          <Badge 
+                            variant={
+                              applicationStatus.variant === 'default' && applicationStatus.badge.includes('Approved') 
+                                ? 'default' 
+                                : applicationStatus.variant === 'destructive' 
+                                ? 'destructive' 
+                                : 'secondary'
+                            }
+                            className={
+                              applicationStatus.badge.includes('Approved')
+                                ? 'bg-green-500 hover:bg-green-600'
+                                : ''
+                            }
+                          >
+                            {applicationStatus.badge}
+                          </Badge>
                         )}
                       </div>
                       <p className="text-sm text-muted-foreground mb-2">
@@ -235,19 +309,29 @@ export default function CreatorRetainers() {
                         View Details
                       </Button>
                     </Link>
-                    {!applied && (
-                      <Button
-                        onClick={() => {
-                          setSelectedContract(contract);
-                          setOpen(true);
-                        }}
-                        className="flex-1"
-                        data-testid={`button-apply-${contract.id}`}
-                      >
-                        <Send className="h-4 w-4 mr-2" />
-                        Apply Now
-                      </Button>
-                    )}
+                    <Button
+                      onClick={() => {
+                        setSelectedContract(contract);
+                        setOpen(true);
+                      }}
+                      variant={
+                        applicationStatus.badge?.includes('Approved') 
+                          ? 'default'
+                          : applicationStatus.variant === 'destructive'
+                          ? 'destructive'
+                          : 'default'
+                      }
+                      className={`flex-1 ${
+                        applicationStatus.badge?.includes('Approved') 
+                          ? 'bg-green-500 hover:bg-green-600' 
+                          : ''
+                      }`}
+                      disabled={applicationStatus.disabled}
+                      data-testid={`button-apply-${contract.id}`}
+                    >
+                      <StatusIcon className="h-4 w-4 mr-2" />
+                      {applicationStatus.buttonText}
+                    </Button>
                   </div>
                 </CardContent>
               </Card>

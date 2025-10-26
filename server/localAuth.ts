@@ -44,6 +44,7 @@ export async function setupAuth(app: Express) {
 
   // Setup session middleware BEFORE passport
   app.use(getSession());
+  
   // Configure Passport Local Strategy
   passport.use(
     new LocalStrategy(async (username, password, done) => {
@@ -76,9 +77,15 @@ export async function setupAuth(app: Express) {
   passport.deserializeUser(async (id: string, done) => {
     try {
       const user = await storage.getUser(id);
+      if (!user) {
+        // User not found - clear the session
+        return done(null, false);
+      }
       done(null, user);
     } catch (error) {
-      done(error);
+      console.error("Error deserializing user:", error);
+      // Return false instead of error to clear invalid sessions
+      done(null, false);
     }
   });
 
@@ -118,7 +125,7 @@ export async function setupAuth(app: Express) {
       // Hash password
       const hashedPassword = await bcrypt.hash(password, 10);
 
-      // Create user
+      // Create user with all required fields
       const user = await storage.createUser({
         username,
         email,
@@ -126,6 +133,8 @@ export async function setupAuth(app: Express) {
         firstName: firstName || null,
         lastName: lastName || null,
         role,
+        accountStatus: 'active', // ✅ Required field
+        profileImageUrl: null,   // ✅ Required field
       });
 
       // Create profile based on role
@@ -145,11 +154,20 @@ export async function setupAuth(app: Express) {
         await storage.createCompanyProfile({
           userId: user.id,
           legalName: username,
+          tradeName: null,
           websiteUrl: null,
           description: null,
           logoUrl: null,
           industry: null,
+          companySize: null,
+          yearFounded: null,
+          contactName: null,
+          contactJobTitle: null,
+          phoneNumber: null,
+          businessAddress: null,
+          verificationDocumentUrl: null,
           status: 'pending',
+          rejectionReason: null,
         });
       }
 

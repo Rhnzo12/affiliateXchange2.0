@@ -74,6 +74,40 @@ export default function Messages() {
     userIdRef.current = user?.id;
   }, [user?.id]);
 
+  // Helper function to get display name for user or company
+  const getDisplayName = (user: any) => {
+    if (!user) return 'User';
+    
+    // Debug logging to see what fields are available
+    console.log('User object in getDisplayName:', user);
+    
+    // Try company-specific fields first
+    const companyName = user.companyName || user.company_name || user.businessName;
+    if (companyName) return companyName;
+    
+    // If it's explicitly a company role
+    if (user.role === 'company') {
+      return user.name || user.username || user.email || 'Company';
+    }
+    
+    // For creators/other users, show first name or username
+    const displayName = user.firstName || user.first_name || user.name || user.username || user.email;
+    return displayName || 'User';
+  };
+
+  // Helper function to get avatar fallback
+  const getAvatarFallback = (user: any) => {
+    if (!user) return 'U';
+    
+    // Try company-specific fields first
+    const companyName = user.companyName || user.company_name || user.businessName;
+    if (companyName) return companyName[0].toUpperCase();
+    
+    // Try general name fields
+    const name = user.firstName || user.first_name || user.name || user.username || user.email;
+    return name ? name[0].toUpperCase() : 'U';
+  };
+
   // Update selected conversation when URL changes
   useEffect(() => {
     if (conversationFromUrl && conversationFromUrl !== selectedConversation) {
@@ -88,31 +122,28 @@ export default function Messages() {
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
-      toast({
-        title: "Unauthorized",
-        description: "You are logged out. Logging in again...",
-        variant: "destructive",
-      });
-      setTimeout(() => {
-        window.location.href = "/api/login";
-      }, 500);
+      window.location.href = "/login";
     }
-  }, [isAuthenticated, isLoading, toast]);
+  }, [isAuthenticated, isLoading]);
 
   // WebSocket connection (only reconnect on auth changes, not UI state)
-  useEffect(() => {
-    if (!isAuthenticated) return;
+// WebSocket connection (only reconnect on auth changes, not UI state)
+useEffect(() => {
+  if (!isAuthenticated) return;
 
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const wsUrl = `${protocol}//${window.location.host}/ws`;
-    
-    let shouldReconnect = true; // Per-effect reconnect flag
-    
-    const connectWebSocket = () => {
-      try {
-        setIsConnecting(true);
-        const socket = new WebSocket(wsUrl);
-        
+  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+  const host = window.location.hostname;
+  const port = window.location.port || '3000';
+  const wsUrl = `${protocol}//${host}:${port}/ws`;
+  
+  let shouldReconnect = true; // Per-effect reconnect flag
+  
+  const connectWebSocket = () => {
+    try {
+      setIsConnecting(true);
+      const socket = new WebSocket(wsUrl);
+      
+      // Rest of your code...
         // Assign immediately so error/close handlers can identify this socket
         wsRef.current = socket;
         
@@ -226,6 +257,14 @@ export default function Messages() {
     queryKey: ["/api/conversations"],
     enabled: isAuthenticated,
   });
+
+  // Debug: Log conversations to see the data structure
+  useEffect(() => {
+    if (conversations && conversations.length > 0) {
+      console.log('Conversations data:', conversations);
+      console.log('First conversation otherUser:', conversations[0]?.otherUser);
+    }
+  }, [conversations]);
 
   const { data: messages = [] } = useQuery<EnhancedMessage[]>({
     queryKey: ["/api/messages", selectedConversation],
@@ -395,13 +434,13 @@ export default function Messages() {
                         <Avatar>
                           <AvatarImage src={conversation.otherUser?.profileImageUrl} />
                           <AvatarFallback>
-                            {conversation.otherUser?.firstName?.[0] || 'U'}
+                            {getAvatarFallback(conversation.otherUser)}
                           </AvatarFallback>
                         </Avatar>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between gap-2">
                             <div className="font-semibold truncate">
-                              {conversation.otherUser?.firstName || 'User'}
+                              {getDisplayName(conversation.otherUser)}
                             </div>
                             <div className="text-xs text-muted-foreground">
                               {conversation.lastMessageAt &&
@@ -452,12 +491,12 @@ export default function Messages() {
                     <Avatar>
                       <AvatarImage src={otherUser?.profileImageUrl} />
                       <AvatarFallback>
-                        {otherUser?.firstName?.[0] || 'U'}
+                        {getAvatarFallback(otherUser)}
                       </AvatarFallback>
                     </Avatar>
                     <div>
                       <h3 className="font-semibold">
-                        {otherUser?.firstName || 'Conversation'}
+                        {getDisplayName(otherUser)}
                       </h3>
                       <p className="text-sm text-muted-foreground">
                         {conversations?.find((c: any) => c.id === selectedConversation)?.offer?.title}
