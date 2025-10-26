@@ -220,6 +220,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(application);
     } catch (error: any) {
+      console.error('[POST /api/applications] Error:', error);
       res.status(500).send(error.message);
     }
   });
