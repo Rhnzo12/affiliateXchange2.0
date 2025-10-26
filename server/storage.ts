@@ -515,7 +515,7 @@ export class DatabaseStorage implements IStorage {
       .innerJoin(users, eq(applications.creatorId, users.id))
       .leftJoin(creatorProfiles, eq(users.id, creatorProfiles.userId))
       .leftJoin(analytics, eq(applications.id, analytics.applicationId))
-      .where(sql`${offers.companyId}::uuid = ${companyId}::uuid`)
+      .where(eq(offers.companyId, companyId))
       .groupBy(
         applications.id,
         offers.id,
@@ -523,7 +523,7 @@ export class DatabaseStorage implements IStorage {
         creatorProfiles.id
       )
       .orderBy(desc(applications.createdAt));
-    
+
     // Transform the data to include a nested creator object
     return result.map(app => ({
       id: app.id,
@@ -732,7 +732,7 @@ export class DatabaseStorage implements IStorage {
   // Favorites
   async getFavoritesByCreator(creatorId: string): Promise<Favorite[]> {
     try {
-      const result = await db.select().from(favorites).where(sql`${favorites.creatorId}::uuid = ${creatorId}::uuid`);
+      const result = await db.select().from(favorites).where(eq(favorites.creatorId, creatorId));
       return result || [];
     } catch (error) {
       console.error('[getFavoritesByCreator] Error:', error);
@@ -755,7 +755,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteFavorite(creatorId: string, offerId: string): Promise<void> {
-    await db.delete(favorites).where(and(sql`${favorites.creatorId}::uuid = ${creatorId}::uuid`, sql`${favorites.offerId}::uuid = ${offerId}::uuid`));
+    await db.delete(favorites).where(and(eq(favorites.creatorId, creatorId), eq(favorites.offerId, offerId)));
   }
 
   // Analytics
@@ -770,8 +770,8 @@ export class DatabaseStorage implements IStorage {
         })
         .from(analytics)
         .innerJoin(applications, eq(analytics.applicationId, applications.id))
-        .where(sql`${applications.creatorId}::uuid = ${creatorId}::uuid`);
-      
+        .where(eq(applications.creatorId, creatorId));
+
       return result[0] || {
         totalEarnings: 0,
         totalClicks: 0,
@@ -792,7 +792,7 @@ export class DatabaseStorage implements IStorage {
   async getAnalyticsTimeSeriesByCreator(creatorId: string, dateRange: string): Promise<any[]> {
     try {
       // Calculate date filter based on range
-      let whereClauses: any[] = [sql`${applications.creatorId}::uuid = ${creatorId}::uuid`];
+      let whereClauses: any[] = [eq(applications.creatorId, creatorId)];
 
       if (dateRange !== 'all') {
         let daysBack = 30;
