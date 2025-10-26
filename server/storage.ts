@@ -639,19 +639,30 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createMessage(message: InsertMessage): Promise<Message> {
-    const result = await db.insert(messages).values(message).returning();
-    
-    // Update conversation's last message timestamp
-    await db
-      .update(conversations)
-      .set({ lastMessageAt: new Date(), updatedAt: new Date() })
-      .where(eq(conversations.id, message.conversationId));
-    
-    return result[0];
+    try {
+      const result = await db.insert(messages).values(message).returning();
+
+      // Update conversation's last message timestamp
+      await db
+        .update(conversations)
+        .set({ lastMessageAt: new Date(), updatedAt: new Date() })
+        .where(eq(conversations.id, message.conversationId));
+
+      return result[0];
+    } catch (error) {
+      console.error('[createMessage] Error:', error);
+      throw error;
+    }
   }
 
   async getMessages(conversationId: string): Promise<Message[]> {
-    return await db.select().from(messages).where(eq(messages.conversationId, conversationId)).orderBy(messages.createdAt);
+    try {
+      const result = await db.select().from(messages).where(eq(messages.conversationId, conversationId)).orderBy(messages.createdAt);
+      return result || [];
+    } catch (error) {
+      console.error('[getMessages] Error:', error);
+      return [];
+    }
   }
 
   async markMessagesAsRead(conversationId: string, userId: string): Promise<void> {

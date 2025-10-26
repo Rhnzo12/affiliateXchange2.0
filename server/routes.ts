@@ -504,6 +504,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const messages = await storage.getMessages(req.params.conversationId);
       res.json(messages);
     } catch (error: any) {
+      console.error('[GET /api/messages/:conversationId] Error:', error);
       res.status(500).send(error.message);
     }
   });
@@ -519,6 +520,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const message = await storage.createMessage(validated);
       res.json(message);
     } catch (error: any) {
+      console.error('[POST /api/messages] Error:', error);
       res.status(500).send(error.message);
     }
   });

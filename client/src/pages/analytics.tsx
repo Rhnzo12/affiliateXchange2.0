@@ -138,7 +138,7 @@ export default function Analytics() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold font-mono">
-              ${(analytics?.totalEarnings || 0).toFixed(2)}
+              ${Number(analytics?.totalEarnings || 0).toFixed(2)}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
               <span className="text-green-600">+{analytics?.earningsGrowth || 0}%</span> from last period
@@ -264,7 +264,7 @@ export default function Analytics() {
                     </div>
                     <div>
                       <div className="text-xs text-muted-foreground">Earned</div>
-                      <div className="font-semibold font-mono">${(offer.earnings || 0).toFixed(2)}</div>
+                      <div className="font-semibold font-mono">${Number(offer.earnings || 0).toFixed(2)}</div>
                     </div>
                   </div>
                 </div>
