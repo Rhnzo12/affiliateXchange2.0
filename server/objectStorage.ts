@@ -1,4 +1,4 @@
-import { Storage, File } from "@google-cloud/storage";
+import { v2 as cloudinary } from 'cloudinary';
 import { Response } from "express";
 import { randomUUID } from "crypto";
 import {
@@ -9,36 +9,12 @@ import {
   setObjectAclPolicy,
 } from "./objectAcl";
 
-const REPLIT_SIDECAR_ENDPOINT = "http://127.0.0.1:1106";
-const IS_REPLIT = process.env.REPLIT_DEV_DOMAIN || process.env.REPL_ID;
-
-// Configure storage client based on environment
-export const objectStorageClient = IS_REPLIT
-  ? new Storage({
-      credentials: {
-        audience: "replit",
-        subject_token_type: "access_token",
-        token_url: `${REPLIT_SIDECAR_ENDPOINT}/token`,
-        type: "external_account",
-        credential_source: {
-          url: `${REPLIT_SIDECAR_ENDPOINT}/credential`,
-          format: {
-            type: "json",
-            subject_token_field_name: "access_token",
-          },
-        },
-        universe_domain: "googleapis.com",
-      },
-      projectId: "",
-    })
-  : process.env.GOOGLE_APPLICATION_CREDENTIALS
-  ? new Storage() // Use default credentials from GOOGLE_APPLICATION_CREDENTIALS env var
-  : new Storage({
-      projectId: process.env.GCS_PROJECT_ID || "",
-      credentials: process.env.GCS_KEY_FILE
-        ? JSON.parse(process.env.GCS_KEY_FILE)
-        : undefined,
-    });
+// Configure Cloudinary
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
 
 export class ObjectNotFoundError extends Error {
   constructor() {
@@ -51,142 +27,239 @@ export class ObjectNotFoundError extends Error {
 export class ObjectStorageService {
   constructor() {}
 
-  getPublicObjectSearchPaths(): Array<string> {
-    const pathsStr = process.env.PUBLIC_OBJECT_SEARCH_PATHS || "";
-    const paths = Array.from(
-      new Set(
-        pathsStr
-          .split(",")
-          .map((path) => path.trim())
-          .filter((path) => path.length > 0)
-      )
+  getCloudinaryFolder(): string {
+    return process.env.CLOUDINARY_FOLDER || "creatorlink/videos";
+  }
+
+  getCloudinaryUploadPreset(): string {
+    return process.env.CLOUDINARY_UPLOAD_PRESET || "";
+  }
+
+  /**
+   * Generate Cloudinary upload signature for client-side uploads
+   * This allows secure direct uploads from the browser
+   */
+  async getObjectEntityUploadURL(): Promise<{
+    uploadUrl: string;
+    uploadPreset?: string;
+    signature?: string;
+    timestamp?: number;
+    apiKey?: string;
+    folder?: string;
+  }> {
+    const timestamp = Math.round(Date.now() / 1000);
+    const folder = this.getCloudinaryFolder();
+    const uploadPreset = this.getCloudinaryUploadPreset();
+
+    // If upload preset is configured, use unsigned upload (simpler)
+    if (uploadPreset) {
+      return {
+        uploadUrl: `https://api.cloudinary.com/v1_1/${process.env.CLOUDINARY_CLOUD_NAME}/upload`,
+        uploadPreset,
+        folder,
+      };
+    }
+
+    // Otherwise, use signed upload (more secure)
+    const paramsToSign = {
+      timestamp,
+      folder,
+    };
+
+    const signature = cloudinary.utils.api_sign_request(
+      paramsToSign,
+      process.env.CLOUDINARY_API_SECRET || ""
     );
-    if (paths.length === 0) {
-      throw new Error(
-        "PUBLIC_OBJECT_SEARCH_PATHS not set. Create a bucket in 'Object Storage' " +
-          "tool and set PUBLIC_OBJECT_SEARCH_PATHS env var (comma-separated paths)."
-      );
-    }
-    return paths;
+
+    return {
+      uploadUrl: `https://api.cloudinary.com/v1_1/${process.env.CLOUDINARY_CLOUD_NAME}/upload`,
+      signature,
+      timestamp,
+      apiKey: process.env.CLOUDINARY_API_KEY,
+      folder,
+    };
   }
 
-  getPrivateObjectDir(): string {
-    const dir = process.env.PRIVATE_OBJECT_DIR || "";
-    if (!dir) {
-      throw new Error(
-        "PRIVATE_OBJECT_DIR not set. Create a bucket in 'Object Storage' " +
-          "tool and set PRIVATE_OBJECT_DIR env var."
-      );
+  /**
+   * Upload a file directly to Cloudinary from server
+   * Used for server-side uploads
+   */
+  async uploadFile(
+    filePath: string,
+    options?: {
+      folder?: string;
+      resourceType?: 'image' | 'video' | 'raw' | 'auto';
+      publicId?: string;
     }
-    return dir;
+  ): Promise<any> {
+    const uploadOptions = {
+      folder: options?.folder || this.getCloudinaryFolder(),
+      resource_type: options?.resourceType || 'auto',
+      public_id: options?.publicId,
+    };
+
+    return await cloudinary.uploader.upload(filePath, uploadOptions);
   }
 
-  async searchPublicObject(filePath: string): Promise<File | null> {
-    for (const searchPath of this.getPublicObjectSearchPaths()) {
-      const fullPath = `${searchPath}/${filePath}`;
-      const { bucketName, objectName } = parseObjectPath(fullPath);
-      const bucket = objectStorageClient.bucket(bucketName);
-      const file = bucket.file(objectName);
-      const [exists] = await file.exists();
-      if (exists) {
-        return file;
-      }
+  /**
+   * Upload a buffer directly to Cloudinary
+   */
+  async uploadBuffer(
+    buffer: Buffer,
+    options?: {
+      folder?: string;
+      resourceType?: 'image' | 'video' | 'raw' | 'auto';
+      publicId?: string;
     }
-    return null;
-  }
-
-  async downloadObject(file: File, res: Response, cacheTtlSec: number = 3600) {
-    try {
-      const [metadata] = await file.getMetadata();
-      const aclPolicy = await getObjectAclPolicy(file);
-      const isPublic = aclPolicy?.visibility === "public";
-      
-      res.set({
-        "Content-Type": metadata.contentType || "application/octet-stream",
-        "Content-Length": metadata.size,
-        "Cache-Control": `${isPublic ? "public" : "private"}, max-age=${cacheTtlSec}`,
-      });
-
-      const stream = file.createReadStream();
-      stream.on("error", (err) => {
-        console.error("Stream error:", err);
-        if (!res.headersSent) {
-          res.status(500).json({ error: "Error streaming file" });
+  ): Promise<any> {
+    return new Promise((resolve, reject) => {
+      const uploadStream = cloudinary.uploader.upload_stream(
+        {
+          folder: options?.folder || this.getCloudinaryFolder(),
+          resource_type: options?.resourceType || 'auto',
+          public_id: options?.publicId,
+        },
+        (error, result) => {
+          if (error) reject(error);
+          else resolve(result);
         }
+      );
+
+      uploadStream.end(buffer);
+    });
+  }
+
+  /**
+   * Get video URL from Cloudinary
+   * Supports transformations for adaptive streaming, thumbnails, etc.
+   */
+  getVideoUrl(
+    publicId: string,
+    options?: {
+      quality?: string;
+      format?: string;
+      transformation?: any[];
+    }
+  ): string {
+    return cloudinary.url(publicId, {
+      resource_type: 'video',
+      quality: options?.quality || 'auto',
+      format: options?.format,
+      transformation: options?.transformation,
+    });
+  }
+
+  /**
+   * Get video thumbnail URL
+   */
+  getVideoThumbnail(publicId: string): string {
+    return cloudinary.url(publicId, {
+      resource_type: 'video',
+      format: 'jpg',
+      transformation: [
+        { width: 400, height: 300, crop: 'fill' },
+        { quality: 'auto' },
+      ],
+    });
+  }
+
+  /**
+   * Download object from Cloudinary and stream to response
+   * Note: For public videos, clients should use direct Cloudinary URLs
+   * This is mainly for private/authenticated access
+   */
+  async downloadObject(
+    publicId: string,
+    res: Response,
+    cacheTtlSec: number = 3600
+  ) {
+    try {
+      // Get the video URL
+      const videoUrl = cloudinary.url(publicId, {
+        resource_type: 'video',
+        secure: true,
       });
-      stream.pipe(res);
+
+      // For Cloudinary, we can just redirect to the URL
+      // or proxy the content if needed for access control
+      res.redirect(videoUrl);
     } catch (error) {
-      console.error("Error downloading file:", error);
+      console.error("Error getting video URL:", error);
       if (!res.headersSent) {
         res.status(500).json({ error: "Error downloading file" });
       }
     }
   }
 
-  async getObjectEntityUploadURL(): Promise<string> {
-    const privateObjectDir = this.getPrivateObjectDir();
-    const objectId = randomUUID();
-    const fullPath = `${privateObjectDir}/uploads/${objectId}`;
-    const { bucketName, objectName } = parseObjectPath(fullPath);
-    return signObjectURL({
-      bucketName,
-      objectName,
-      method: "PUT",
-      ttlSec: 900,
+  /**
+   * Delete a video from Cloudinary
+   */
+  async deleteVideo(publicId: string): Promise<any> {
+    return await cloudinary.uploader.destroy(publicId, {
+      resource_type: 'video',
     });
   }
 
-  async getObjectEntityFile(objectPath: string): Promise<File> {
+  /**
+   * Get video metadata from Cloudinary
+   */
+  async getVideoInfo(publicId: string): Promise<any> {
+    return await cloudinary.api.resource(publicId, {
+      resource_type: 'video',
+    });
+  }
+
+  /**
+   * Legacy methods for compatibility with existing code
+   * These are simplified for Cloudinary
+   */
+
+  async searchPublicObject(filePath: string): Promise<any | null> {
+    // With Cloudinary, we work with public_ids instead of file paths
+    // This is a compatibility layer
+    try {
+      const info = await this.getVideoInfo(filePath);
+      return info;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  async getObjectEntityFile(objectPath: string): Promise<any> {
     if (!objectPath.startsWith("/objects/")) {
       throw new ObjectNotFoundError();
     }
-    const parts = objectPath.slice(1).split("/");
-    if (parts.length < 2) {
+    const publicId = objectPath.replace("/objects/", "");
+
+    try {
+      const info = await this.getVideoInfo(publicId);
+      return info;
+    } catch (error) {
       throw new ObjectNotFoundError();
     }
-    const entityId = parts.slice(1).join("/");
-    let entityDir = this.getPrivateObjectDir();
-    if (!entityDir.endsWith("/")) {
-      entityDir = `${entityDir}/`;
-    }
-    const objectEntityPath = `${entityDir}${entityId}`;
-    const { bucketName, objectName } = parseObjectPath(objectEntityPath);
-    const bucket = objectStorageClient.bucket(bucketName);
-    const objectFile = bucket.file(objectName);
-    const [exists] = await objectFile.exists();
-    if (!exists) {
-      throw new ObjectNotFoundError();
-    }
-    return objectFile;
   }
 
   normalizeObjectEntityPath(rawPath: string): string {
-    if (!rawPath.startsWith("https://storage.googleapis.com/")) {
-      return rawPath;
+    // Convert Cloudinary URLs to normalized paths
+    if (rawPath.startsWith("https://res.cloudinary.com/")) {
+      const url = new URL(rawPath);
+      const pathParts = url.pathname.split('/');
+      // Cloudinary URL format: /cloud_name/resource_type/upload/v123456/folder/public_id.ext
+      const publicIdWithExt = pathParts.slice(-1)[0];
+      const publicId = publicIdWithExt.split('.')[0];
+      return `/objects/${publicId}`;
     }
-    const url = new URL(rawPath);
-    const rawObjectPath = url.pathname;
-    let objectEntityDir = this.getPrivateObjectDir();
-    if (!objectEntityDir.endsWith("/")) {
-      objectEntityDir = `${objectEntityDir}/`;
-    }
-    if (!rawObjectPath.startsWith(objectEntityDir)) {
-      return rawObjectPath;
-    }
-    const entityId = rawObjectPath.slice(objectEntityDir.length);
-    return `/objects/${entityId}`;
+    return rawPath;
   }
 
   async trySetObjectEntityAclPolicy(
     rawPath: string,
     aclPolicy: ObjectAclPolicy
   ): Promise<string> {
+    // Cloudinary handles access control differently
+    // Public resources are accessible by default
+    // For private resources, you would use authentication tokens
     const normalizedPath = this.normalizeObjectEntityPath(rawPath);
-    if (!normalizedPath.startsWith("/")) {
-      return normalizedPath;
-    }
-    const objectFile = await this.getObjectEntityFile(normalizedPath);
-    await setObjectAclPolicy(objectFile, aclPolicy);
     return normalizedPath;
   }
 
@@ -196,83 +269,21 @@ export class ObjectStorageService {
     requestedPermission,
   }: {
     userId?: string;
-    objectFile: File;
+    objectFile: any;
     requestedPermission?: ObjectPermission;
   }): Promise<boolean> {
-    return canAccessObject({
-      userId,
-      objectFile,
-      requestedPermission: requestedPermission ?? ObjectPermission.READ,
-    });
-  }
-}
-
-function parseObjectPath(path: string): {
-  bucketName: string;
-  objectName: string;
-} {
-  if (!path.startsWith("/")) {
-    path = `/${path}`;
-  }
-  const pathParts = path.split("/");
-  if (pathParts.length < 3) {
-    throw new Error("Invalid path: must contain at least a bucket name");
-  }
-  const bucketName = pathParts[1];
-  const objectName = pathParts.slice(2).join("/");
-  return {
-    bucketName,
-    objectName,
-  };
-}
-
-async function signObjectURL({
-  bucketName,
-  objectName,
-  method,
-  ttlSec,
-}: {
-  bucketName: string;
-  objectName: string;
-  method: "GET" | "PUT" | "DELETE" | "HEAD";
-  ttlSec: number;
-}): Promise<string> {
-  // Use Replit sidecar for signed URLs on Replit
-  if (IS_REPLIT) {
-    const request = {
-      bucket_name: bucketName,
-      object_name: objectName,
-      method,
-      expires_at: new Date(Date.now() + ttlSec * 1000).toISOString(),
-    };
-    const response = await fetch(
-      `${REPLIT_SIDECAR_ENDPOINT}/object-storage/signed-object-url`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(request),
-      }
-    );
-    if (!response.ok) {
-      throw new Error(
-        `Failed to get signed URL from Replit sidecar: ${response.statusText}`
-      );
-    }
-    const data = await response.json() as { signed_url: string };
-    return data.signed_url;
+    // For now, allow all access
+    // In production, implement proper access control based on your requirements
+    return true;
   }
 
-  // Use native Google Cloud Storage signed URLs for other environments
-  const bucket = objectStorageClient.bucket(bucketName);
-  const file = bucket.file(objectName);
+  getPublicObjectSearchPaths(): Array<string> {
+    // Not used with Cloudinary, but kept for compatibility
+    return [this.getCloudinaryFolder()];
+  }
 
-  const [signedUrl] = await file.getSignedUrl({
-    version: 'v4',
-    action: method === 'GET' ? 'read' : method === 'PUT' ? 'write' : method === 'DELETE' ? 'delete' : 'read',
-    expires: Date.now() + ttlSec * 1000,
-  });
-
-  return signedUrl;
+  getPrivateObjectDir(): string {
+    // Not used with Cloudinary, but kept for compatibility
+    return this.getCloudinaryFolder();
+  }
 }

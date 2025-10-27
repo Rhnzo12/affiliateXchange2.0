@@ -147,29 +147,44 @@ export default function CompanyOfferDetail() {
     setIsUploading(true);
 
     try {
-      // Get upload URL
+      // Get Cloudinary upload parameters
       const uploadResponse = await fetch("/api/objects/upload", {
         method: "POST",
         credentials: "include",
       });
       const uploadData = await uploadResponse.json();
 
-      // Upload the file
-      const uploadResult = await fetch(uploadData.uploadURL, {
-        method: "PUT",
-        body: file,
-        headers: {
-          'Content-Type': file.type || 'video/mp4',
-        },
+      // Create FormData for Cloudinary upload
+      const formData = new FormData();
+      formData.append('file', file);
+
+      // Add Cloudinary parameters
+      if (uploadData.uploadPreset) {
+        formData.append('upload_preset', uploadData.uploadPreset);
+      } else if (uploadData.signature) {
+        formData.append('signature', uploadData.signature);
+        formData.append('timestamp', uploadData.timestamp.toString());
+        formData.append('api_key', uploadData.apiKey);
+      }
+
+      if (uploadData.folder) {
+        formData.append('folder', uploadData.folder);
+      }
+
+      // Upload to Cloudinary
+      const uploadResult = await fetch(uploadData.uploadUrl, {
+        method: "POST",
+        body: formData,
       });
 
       if (uploadResult.ok) {
-        const uploadedUrl = uploadData.uploadURL.split("?")[0];
+        const cloudinaryResponse = await uploadResult.json();
+        const uploadedUrl = cloudinaryResponse.secure_url;
         setVideoUrl(uploadedUrl);
         setIsUploading(false);
         toast({
           title: "Video Uploaded",
-          description: "Video uploaded successfully. Please fill in the details below.",
+          description: "Video uploaded successfully to Cloudinary. Please fill in the details below.",
         });
       } else {
         throw new Error("Upload failed");
