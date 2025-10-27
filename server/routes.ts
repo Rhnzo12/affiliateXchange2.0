@@ -1023,11 +1023,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // RETAINER CONTRACTS ROUTES
   // =====================================================
 
-  // Get all open retainer contracts (for creators to browse)
+  // Get all retainer contracts for creator (open contracts + contracts assigned to them)
   app.get("/api/retainer-contracts", requireAuth, requireRole('creator'), async (req, res) => {
     try {
-      const contracts = await storage.getOpenRetainerContracts();
-      res.json(contracts);
+      const userId = (req.user as any).id;
+
+      // Get open contracts (for browsing/applying)
+      const openContracts = await storage.getOpenRetainerContracts();
+
+      // Get contracts assigned to this creator (their approved contracts)
+      const myContracts = await storage.getRetainerContractsByCreator(userId);
+
+      // Combine and deduplicate (in case a contract is both open and assigned)
+      const contractMap = new Map();
+
+      // Add my contracts first (higher priority)
+      myContracts.forEach(contract => {
+        contractMap.set(contract.id, contract);
+      });
+
+      // Add open contracts (only if not already in map)
+      openContracts.forEach(contract => {
+        if (!contractMap.has(contract.id)) {
+          contractMap.set(contract.id, contract);
+        }
+      });
+
+      // Convert map back to array
+      const allContracts = Array.from(contractMap.values());
+
+      res.json(allContracts);
     } catch (error: any) {
       res.status(500).send(error.message);
     }
