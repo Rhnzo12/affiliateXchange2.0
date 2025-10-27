@@ -451,6 +451,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Record conversion (companies can report sales/conversions)
+  app.post("/api/conversions/:applicationId", requireAuth, requireRole('company'), async (req, res) => {
+    try {
+      const { applicationId } = req.params;
+      const { saleAmount } = req.body;
+
+      // Verify the application belongs to an offer owned by this company
+      const application = await storage.getApplication(applicationId);
+      if (!application) {
+        return res.status(404).json({ error: "Application not found" });
+      }
+
+      const offer = await storage.getOffer(application.offerId);
+      if (!offer) {
+        return res.status(404).json({ error: "Offer not found" });
+      }
+
+      const userId = (req.user as any).id;
+      const companyProfile = await storage.getCompanyProfile(userId);
+      if (!companyProfile || offer.companyId !== companyProfile.id) {
+        return res.status(403).json({ error: "Forbidden: You don't own this offer" });
+      }
+
+      // Record the conversion and calculate earnings
+      await storage.recordConversion(applicationId, saleAmount ? parseFloat(saleAmount) : undefined);
+
+      res.json({
+        success: true,
+        message: "Conversion recorded successfully"
+      });
+    } catch (error: any) {
+      console.error('[Record Conversion] Error:', error);
+      res.status(500).send(error.message);
+    }
+  });
+
   // Analytics routes
   app.get("/api/analytics", requireAuth, async (req, res) => {
     try {
@@ -1208,9 +1244,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!deliverable) return res.status(404).send("Deliverable not found");
       const contract = await storage.getRetainerContract(deliverable.contractId);
       if (!contract || contract.companyId !== companyProfile.id) return res.status(403).send("Forbidden");
+
+      // Approve the deliverable
       const approved = await storage.approveRetainerDeliverable(req.params.id, req.body.reviewNotes);
+
+      // Calculate payment amount per video (monthly amount / videos per month)
+      const monthlyAmount = parseFloat(contract.monthlyAmount);
+      const videosPerMonth = contract.videosPerMonth || 1;
+      const paymentPerVideo = monthlyAmount / videosPerMonth;
+
+      // Create payment for the approved deliverable
+      await storage.createPayment({
+        creatorId: deliverable.creatorId,
+        offerId: null, // Retainer payments don't have an offer ID
+        applicationId: null,
+        amount: paymentPerVideo.toFixed(2),
+        status: 'pending',
+        paymentType: 'retainer',
+        description: `Retainer payment for ${contract.title} - Month ${deliverable.monthNumber}, Video ${deliverable.videoNumber}`,
+      });
+
+      console.log(`[Retainer Payment] Created payment of $${paymentPerVideo.toFixed(2)} for creator ${deliverable.creatorId}`);
+
       res.json(approved);
     } catch (error: any) {
+      console.error('[Approve Deliverable] Error:', error);
       res.status(500).send(error.message);
     }
   });
