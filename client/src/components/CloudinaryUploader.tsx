@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import Uppy from "@uppy/core";
+import type { UppyFile, UploadResult } from "@uppy/core";
 import { DashboardModal } from "@uppy/react";
 import XHRUpload from "@uppy/xhr-upload";
-import type { UploadResult } from "@uppy/core";
 import { Button } from "@/components/ui/button";
 
 interface CloudinaryUploadParams {
@@ -43,68 +43,98 @@ export function CloudinaryUploader({
         allowedFileTypes: allowedFileTypes.length > 0 ? allowedFileTypes : undefined,
       },
       autoProceed: false,
-    })
-      .use(XHRUpload, {
-        endpoint: 'placeholder', // Will be set dynamically
-        method: 'POST',
-        formData: true,
-        fieldName: 'file',
-        getResponseData: (responseText: string) => {
+    }).use(XHRUpload, {
+      endpoint: "placeholder", // Will be updated before upload
+      method: "POST",
+      formData: true,
+      fieldName: "file",
+      responseType: "json",
+      getResponseData: (responseText: string) => {
+        try {
           const response = JSON.parse(responseText);
           return {
-            uploadURL: response.secure_url,
-            publicId: response.public_id,
+            ...response,
+            uploadURL: response.secure_url || response.url,
           };
-        },
-      })
-      .on('file-added', async () => {
-        // Get upload parameters when file is added
-        const params = await onGetUploadParameters();
+        } catch (error) {
+          console.error("Failed to parse upload response", error);
+          return {};
+        }
+      },
+    })
+  );
 
-        // Update the endpoint
-        const xhrUpload = uppy.getPlugin('XHRUpload');
+  useEffect(() => {
+    const handleFileAdded = async (file: UppyFile) => {
+      try {
+        const params = await onGetUploadParameters();
+        const xhrUpload = uppy.getPlugin<XHRUpload>("XHRUpload") as XHRUpload | undefined;
+
         if (xhrUpload) {
-          // @ts-ignore - accessing private property
-          xhrUpload.opts.endpoint = params.uploadUrl;
+          xhrUpload.setOptions({ endpoint: params.uploadUrl });
         }
 
-        // Set form data fields for Cloudinary
-        uppy.setMeta({
-          upload_preset: params.uploadPreset,
-          signature: params.signature,
-          timestamp: params.timestamp,
-          api_key: params.apiKey,
-          folder: params.folder,
-        });
-      })
-      .on('upload', (data) => {
-        // Add Cloudinary parameters to each file
-        data.fileIDs.forEach((fileId) => {
-          const file = uppy.getFile(fileId);
-          const meta = uppy.getState().meta;
-
-          // Build form data for Cloudinary
-          const formData: Record<string, any> = {};
-
-          if (meta.upload_preset) {
-            formData.upload_preset = meta.upload_preset;
-          } else if (meta.signature) {
-            formData.signature = meta.signature;
-            formData.timestamp = meta.timestamp;
-            formData.api_key = meta.apiKey;
+        const meta: Record<string, any> = {};
+        if (params.uploadPreset) {
+          meta.upload_preset = params.uploadPreset;
+        } else if (params.signature) {
+          meta.signature = params.signature;
+          if (params.timestamp) {
+            meta.timestamp = params.timestamp.toString();
           }
-
-          if (meta.folder) {
-            formData.folder = meta.folder;
+          if (params.apiKey) {
+            meta.api_key = params.apiKey;
           }
+        }
 
-          uppy.setFileMeta(fileId, formData);
-        });
-      })
-      .on('complete', (result) => {
+        if (params.folder) {
+          meta.folder = params.folder;
+        }
+
+        uppy.setFileMeta(file.id, meta);
+      } catch (error) {
+        console.error("Failed to get upload parameters", error);
+        uppy.info("Failed to prepare upload. Please try again.", "error", 5000);
+        uppy.removeFile(file.id);
+      }
+    };
+
+    const handleComplete = (
+      result: UploadResult<Record<string, unknown>, Record<string, unknown>>
+    ) => {
+      if (result.failed.length > 0 && result.successful.length === 0) {
+        uppy.info("Upload failed. Please try again.", "error", 5000);
+        return;
+      }
+
+      if (result.successful.length > 0) {
+        setShowModal(false);
         onComplete?.(result);
-      })
-  );
+        uppy.reset();
+      }
+    };
+
+    const handleUploadError = (file: UppyFile, error: Error) => {
+      console.error("Upload error", error, file);
+      uppy.info("Upload failed. Please try again.", "error", 5000);
+    };
+
+    uppy.on("file-added", handleFileAdded);
+    uppy.on("complete", handleComplete);
+    uppy.on("upload-error", handleUploadError);
+
+    return () => {
+      uppy.off("file-added", handleFileAdded);
+      uppy.off("complete", handleComplete);
+      uppy.off("upload-error", handleUploadError);
+    };
+  }, [onComplete, onGetUploadParameters, uppy]);
+
+  useEffect(() => {
+    return () => {
+      uppy.close({ reason: "unmount" });
+    };
+  }, [uppy]);
 
   return (
     <div>
