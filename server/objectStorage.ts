@@ -14,6 +14,7 @@ cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
   api_secret: process.env.CLOUDINARY_API_SECRET,
+  secure: true,
 });
 
 export class ObjectNotFoundError extends Error {
@@ -35,6 +36,22 @@ export class ObjectStorageService {
     return process.env.CLOUDINARY_UPLOAD_PRESET || "";
   }
 
+  private getCloudName(): string {
+    const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+    if (!cloudName) {
+      throw new Error(
+        "CLOUDINARY_CLOUD_NAME is not configured. Please set it in your environment."
+      );
+    }
+
+    return cloudName;
+  }
+
+  private getCloudinaryUploadUrl(): string {
+    const cloudName = this.getCloudName();
+    return `https://api.cloudinary.com/v1_1/${cloudName}/auto/upload`;
+  }
+
   /**
    * Generate Cloudinary upload signature for client-side uploads
    * This allows secure direct uploads from the browser
@@ -54,7 +71,7 @@ export class ObjectStorageService {
     // If upload preset is configured, use unsigned upload (simpler)
     if (uploadPreset) {
       return {
-        uploadUrl: `https://api.cloudinary.com/v1_1/${process.env.CLOUDINARY_CLOUD_NAME}/upload`,
+        uploadUrl: this.getCloudinaryUploadUrl(),
         uploadPreset,
         folder,
       };
@@ -72,7 +89,7 @@ export class ObjectStorageService {
     );
 
     return {
-      uploadUrl: `https://api.cloudinary.com/v1_1/${process.env.CLOUDINARY_CLOUD_NAME}/upload`,
+      uploadUrl: this.getCloudinaryUploadUrl(),
       signature,
       timestamp,
       apiKey: process.env.CLOUDINARY_API_KEY,
