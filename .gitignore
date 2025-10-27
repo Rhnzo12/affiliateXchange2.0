@@ -10,6 +10,11 @@ server/public
 .env.local
 .env.production
 
+# Google Cloud Storage Keys (NEVER commit these!)
+keys/
+*-key.json
+gcs-*.json
+
 # Database exports
 database-export-*.json
 database-dump.sql

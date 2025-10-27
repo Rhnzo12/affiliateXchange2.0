@@ -34,7 +34,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useAuth } from "@/hooks/useAuth";
-import { ObjectUploader } from "@/components/ObjectUploader";
+import { CloudinaryUploader } from "@/components/CloudinaryUploader";
 import { Label } from "@/components/ui/label";
 
 const uploadDeliverableSchema = z.object({
@@ -86,19 +86,17 @@ export default function CreatorRetainerDetail() {
       credentials: "include",
     });
     const data = await response.json();
-    return {
-      method: "PUT" as const,
-      url: data.uploadURL,
-    };
+    return data; // Returns Cloudinary upload parameters
   };
 
   const handleUploadComplete = (result: any) => {
     if (result.successful && result.successful[0]) {
-      const uploadedUrl = result.successful[0].uploadURL.split("?")[0];
+      // Cloudinary returns the secure URL in the response
+      const uploadedUrl = result.successful[0].response?.body?.uploadURL || result.successful[0].uploadURL;
       setVideoUrl(uploadedUrl);
       toast({
         title: "Video Uploaded",
-        description: "Video file uploaded successfully. Now fill in the details.",
+        description: "Video file uploaded successfully to Cloudinary. Now fill in the details.",
       });
     }
   };
@@ -291,14 +289,15 @@ export default function CreatorRetainerDetail() {
 
                   <div className="space-y-2">
                     <Label>Video File</Label>
-                    <ObjectUploader
+                    <CloudinaryUploader
                       maxNumberOfFiles={1}
                       maxFileSize={524288000}
                       onGetUploadParameters={handleGetUploadUrl}
                       onComplete={handleUploadComplete}
+                      allowedFileTypes={['video/*']}
                     >
                       {videoUrl ? "Video Uploaded ✓" : "Upload Video File"}
-                    </ObjectUploader>
+                    </CloudinaryUploader>
                     {videoUrl && (
                       <p className="text-xs text-muted-foreground">
                         Video uploaded successfully

@@ -890,8 +890,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/objects/upload", requireAuth, async (req, res) => {
     const objectStorageService = new ObjectStorageService();
-    const uploadURL = await objectStorageService.getObjectEntityUploadURL();
-    res.json({ uploadURL });
+    const uploadParams = await objectStorageService.getObjectEntityUploadURL();
+    res.json(uploadParams);
   });
 
   app.put("/api/company-logos", requireAuth, requireRole('company'), async (req, res) => {
