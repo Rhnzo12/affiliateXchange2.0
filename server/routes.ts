@@ -889,9 +889,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.post("/api/objects/upload", requireAuth, async (req, res) => {
-    const objectStorageService = new ObjectStorageService();
-    const uploadParams = await objectStorageService.getObjectEntityUploadURL();
-    res.json(uploadParams);
+    try {
+      const objectStorageService = new ObjectStorageService();
+      const uploadParams = await objectStorageService.getObjectEntityUploadURL();
+      res.json(uploadParams);
+    } catch (error) {
+      console.error("Error generating Cloudinary upload parameters:", error);
+      res.status(500).json({
+        error: "Unable to generate upload parameters",
+        details: error instanceof Error ? error.message : undefined,
+      });
+    }
   });
 
   app.put("/api/company-logos", requireAuth, requireRole('company'), async (req, res) => {
