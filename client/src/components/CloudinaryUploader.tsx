@@ -65,40 +65,6 @@ export function CloudinaryUploader({
   );
 
   useEffect(() => {
-    const handleFileAdded = async (file: UppyFile) => {
-      try {
-        const params = await onGetUploadParameters();
-        const xhrUpload = uppy.getPlugin<XHRUpload>("XHRUpload") as XHRUpload | undefined;
-
-        if (xhrUpload) {
-          xhrUpload.setOptions({ endpoint: params.uploadUrl });
-        }
-
-        const meta: Record<string, any> = {};
-        if (params.uploadPreset) {
-          meta.upload_preset = params.uploadPreset;
-        } else if (params.signature) {
-          meta.signature = params.signature;
-          if (params.timestamp) {
-            meta.timestamp = params.timestamp.toString();
-          }
-          if (params.apiKey) {
-            meta.api_key = params.apiKey;
-          }
-        }
-
-        if (params.folder) {
-          meta.folder = params.folder;
-        }
-
-        uppy.setFileMeta(file.id, meta);
-      } catch (error) {
-        console.error("Failed to get upload parameters", error);
-        uppy.info("Failed to prepare upload. Please try again.", "error", 5000);
-        uppy.removeFile(file.id);
-      }
-    };
-
     const handleComplete = (
       result: UploadResult<Record<string, unknown>, Record<string, unknown>>
     ) => {
@@ -119,16 +85,84 @@ export function CloudinaryUploader({
       uppy.info("Upload failed. Please try again.", "error", 5000);
     };
 
-    uppy.on("file-added", handleFileAdded);
     uppy.on("complete", handleComplete);
     uppy.on("upload-error", handleUploadError);
 
     return () => {
-      uppy.off("file-added", handleFileAdded);
       uppy.off("complete", handleComplete);
       uppy.off("upload-error", handleUploadError);
     };
-  }, [onComplete, onGetUploadParameters, uppy]);
+  }, [onComplete, uppy]);
+
+  useEffect(() => {
+    const prepareUpload = async (fileIDs: string[]) => {
+      await Promise.all(
+        fileIDs.map(async (fileID) => {
+          const file = uppy.getFile(fileID) as UppyFile | undefined;
+
+          if (!file) {
+            return;
+          }
+
+          try {
+            const params = await onGetUploadParameters();
+            const xhrUpload = uppy.getPlugin<XHRUpload>("XHRUpload") as XHRUpload | undefined;
+
+            if (xhrUpload) {
+              xhrUpload.setOptions({ endpoint: params.uploadUrl });
+            }
+
+            const xhrOptions = {
+              ...(file.xhrUpload ?? {}),
+              endpoint: params.uploadUrl,
+              method: "POST",
+              formData: true,
+              fieldName: "file",
+            };
+
+            uppy.setFileState(fileID, {
+              xhrUpload: xhrOptions,
+            });
+
+            const meta: Record<string, string> = {};
+
+            if (params.uploadPreset) {
+              meta.upload_preset = params.uploadPreset;
+            } else {
+              if (params.signature) {
+                meta.signature = params.signature;
+              }
+              if (params.timestamp) {
+                meta.timestamp = params.timestamp.toString();
+              }
+              if (params.apiKey) {
+                meta.api_key = params.apiKey;
+              }
+            }
+
+            if (params.folder) {
+              meta.folder = params.folder;
+            }
+
+            // Let Cloudinary detect the appropriate resource type (video/image)
+            meta.resource_type = "auto";
+
+            uppy.setFileMeta(fileID, meta);
+          } catch (error) {
+            console.error("Failed to prepare Cloudinary upload", error);
+            uppy.info("Failed to prepare upload. Please try again.", "error", 5000);
+            uppy.removeFile(fileID);
+          }
+        })
+      );
+    };
+
+    uppy.addPreProcessor(prepareUpload);
+
+    return () => {
+      uppy.removePreProcessor(prepareUpload);
+    };
+  }, [onGetUploadParameters, uppy]);
 
   useEffect(() => {
     return () => {

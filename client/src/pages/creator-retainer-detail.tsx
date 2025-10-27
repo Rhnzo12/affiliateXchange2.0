@@ -86,6 +86,12 @@ export default function CreatorRetainerDetail() {
       method: "POST",
       credentials: "include",
     });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(errorText || "Failed to get upload parameters");
+    }
+
     const data = await response.json();
     return data; // Returns Cloudinary upload parameters
   };
