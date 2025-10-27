@@ -1,5 +1,5 @@
 import type { Express, Request } from "express";
-import { createServer, type Server } from "http";
+import { createServer, type Server, type IncomingMessage } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./localAuth";
@@ -889,9 +889,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.post("/api/objects/upload", requireAuth, async (req, res) => {
-    const objectStorageService = new ObjectStorageService();
-    const uploadParams = await objectStorageService.getObjectEntityUploadURL();
-    res.json(uploadParams);
+    try {
+      const objectStorageService = new ObjectStorageService();
+      const uploadParams = await objectStorageService.getObjectEntityUploadURL();
+      res.json(uploadParams);
+    } catch (error) {
+      console.error("Error generating Cloudinary upload parameters:", error);
+      res.status(500).json({
+        error: "Unable to generate upload parameters",
+        details: error instanceof Error ? error.message : undefined,
+      });
+    }
   });
 
   app.put("/api/company-logos", requireAuth, requireRole('company'), async (req, res) => {
@@ -1337,12 +1345,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
 
   // WebSocket server for real-time messaging
-  const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
+  const wss = new WebSocketServer({ noServer: true });
+
+  httpServer.on("upgrade", (request: IncomingMessage, socket, head) => {
+    const { url } = request;
+
+    if (!url || !url.startsWith("/ws")) {
+      return;
+    }
+
+    wss.handleUpgrade(request, socket, head, (ws) => {
+      wss.emit("connection", ws, request);
+    });
+  });
 
   // Store connected clients
   const clients = new Map<string, WebSocket>();
 
-  wss.on('connection', (ws: WebSocket, req: any) => {
+  wss.on('connection', (ws: WebSocket, req: IncomingMessage & { user?: { id?: string } }) => {
     const userId = req.user?.id; // This would need proper auth integration
     
     if (userId) {
