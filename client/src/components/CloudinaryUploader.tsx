@@ -108,7 +108,10 @@ export function CloudinaryUploader({
             const params = await onGetUploadParameters();
             const xhrUpload = uppy.getPlugin<XHRUpload>("XHRUpload") as XHRUpload | undefined;
 
-            xhrUpload?.setOptions({ endpoint: params.uploadUrl });
+            if (xhrUpload) {
+              xhrUpload.setOptions({ endpoint: params.uploadUrl });
+            }
+
             const xhrOptions = {
               ...(file.xhrUpload ?? {}),
               endpoint: params.uploadUrl,
