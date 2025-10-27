@@ -124,6 +124,7 @@ export interface IStorage {
   getAnalyticsTimeSeriesByCreator(creatorId: string, dateRange: string): Promise<any[]>;
   getAnalyticsByApplication(applicationId: string): Promise<any[]>;
   logTrackingClick(applicationId: string, clickData: { ip: string; userAgent: string; referer: string; timestamp: Date }): Promise<void>;
+  recordConversion(applicationId: string, saleAmount?: number): Promise<void>;
 
   // Payment Settings
   getPaymentSettings(userId: string): Promise<PaymentSetting[]>;
@@ -912,6 +913,105 @@ export class DatabaseStorage implements IStorage {
     }
 
     console.log(`[Tracking] Logged click for application ${applicationId} from ${city}, ${country} - IP: ${clickData.ip}`);
+  }
+
+  // Record Conversion and Calculate Earnings
+  async recordConversion(applicationId: string, saleAmount?: number): Promise<void> {
+    // Get application and offer details
+    const application = await this.getApplication(applicationId);
+    if (!application) {
+      console.error('[Conversion] Application not found:', applicationId);
+      return;
+    }
+
+    const offer = await this.getOffer(application.offerId);
+    if (!offer) {
+      console.error('[Conversion] Offer not found:', application.offerId);
+      return;
+    }
+
+    // Calculate earnings based on commission type
+    let earnings = 0;
+
+    switch (offer.commissionType) {
+      case 'per_sale':
+        if (!saleAmount || !offer.commissionPercentage) {
+          console.error('[Conversion] Sale amount required for per_sale commission');
+          return;
+        }
+        earnings = (saleAmount * parseFloat(offer.commissionPercentage.toString())) / 100;
+        break;
+
+      case 'per_lead':
+      case 'per_click':
+        if (!offer.commissionAmount) {
+          console.error('[Conversion] Commission amount not set');
+          return;
+        }
+        earnings = parseFloat(offer.commissionAmount.toString());
+        break;
+
+      case 'monthly_retainer':
+        // Retainer payments are handled separately via deliverable approval
+        console.log('[Conversion] Retainer payments handled via deliverable approval');
+        return;
+
+      case 'hybrid':
+        // For hybrid, use commission amount if set, otherwise percentage
+        if (offer.commissionAmount) {
+          earnings = parseFloat(offer.commissionAmount.toString());
+        } else if (saleAmount && offer.commissionPercentage) {
+          earnings = (saleAmount * parseFloat(offer.commissionPercentage.toString())) / 100;
+        }
+        break;
+    }
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // Check if analytics record exists for today
+    const existing = await db
+      .select()
+      .from(analytics)
+      .where(and(
+        eq(analytics.applicationId, applicationId),
+        eq(analytics.date, today)
+      ))
+      .limit(1);
+
+    if (existing.length > 0) {
+      // Update existing record - increment conversions and add earnings
+      await db
+        .update(analytics)
+        .set({
+          conversions: sql`${analytics.conversions} + 1`,
+          earnings: sql`${analytics.earnings} + ${earnings.toFixed(2)}`,
+        })
+        .where(eq(analytics.id, existing[0].id));
+    } else {
+      // Create new record
+      await db.insert(analytics).values({
+        applicationId,
+        date: today,
+        clicks: 0,
+        uniqueClicks: 0,
+        conversions: 1,
+        earnings: earnings.toFixed(2),
+      });
+    }
+
+    // Create payment record for creator
+    await this.createPayment({
+      creatorId: application.creatorId,
+      offerId: application.offerId,
+      applicationId: applicationId,
+      amount: earnings.toFixed(2),
+      status: 'pending',
+      paymentType: 'commission',
+      description: `Commission for ${offer.commissionType} conversion`,
+    });
+
+    console.log(`[Conversion] Recorded conversion for application ${applicationId} - Earnings: $${earnings.toFixed(2)}`);
   }
 
   // Payment Settings

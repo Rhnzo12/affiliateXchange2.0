@@ -117,7 +117,7 @@ export default function CreatorRetainerDetail() {
         title: data.title,
         description: data.description || undefined,
       };
-      return await apiRequest("POST", "/api/retainer-deliverables", payload);
+      return await apiRequest("POST", "/api/creator/retainer-deliverables", payload);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/retainer-contracts", contractId, "deliverables"] });
