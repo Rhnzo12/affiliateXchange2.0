@@ -36,6 +36,7 @@ import { z } from "zod";
 import { useAuth } from "@/hooks/useAuth";
 import { CloudinaryUploader } from "@/components/CloudinaryUploader";
 import { Label } from "@/components/ui/label";
+import type { UploadResult } from "@uppy/core";
 
 const uploadDeliverableSchema = z.object({
   platformUrl: z.string().url("Must be a valid URL").optional().or(z.literal("")),
@@ -85,18 +86,42 @@ export default function CreatorRetainerDetail() {
       method: "POST",
       credentials: "include",
     });
+    if (!response.ok) {
+      throw new Error("Failed to get upload credentials. Please try again.");
+    }
     const data = await response.json();
     return data; // Returns Cloudinary upload parameters
   };
 
-  const handleUploadComplete = (result: any) => {
+  const handleUploadComplete = (
+    result: UploadResult<Record<string, unknown>, Record<string, unknown>>
+  ) => {
     if (result.successful && result.successful[0]) {
-      // Cloudinary returns the secure URL in the response
-      const uploadedUrl = result.successful[0].response?.body?.uploadURL || result.successful[0].uploadURL;
-      setVideoUrl(uploadedUrl);
+      const successfulUpload = result.successful[0];
+      const uploadedUrl =
+        successfulUpload.response?.body?.uploadURL ||
+        successfulUpload.response?.body?.secure_url ||
+        successfulUpload.response?.body?.url ||
+        successfulUpload.uploadURL;
+
+      if (uploadedUrl) {
+        setVideoUrl(uploadedUrl as string);
+        toast({
+          title: "Video Uploaded",
+          description: "Video file uploaded successfully to Cloudinary. Now fill in the details.",
+        });
+      } else {
+        toast({
+          title: "Upload Completed",
+          description: "The file uploaded, but we couldn't determine its URL. Please try again.",
+          variant: "destructive",
+        });
+      }
+    } else if (result.failed && result.failed.length > 0) {
       toast({
-        title: "Video Uploaded",
-        description: "Video file uploaded successfully to Cloudinary. Now fill in the details.",
+        title: "Upload Failed",
+        description: "We couldn't upload your video. Please try again.",
+        variant: "destructive",
       });
     }
   };
