@@ -10,16 +10,17 @@ import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
-import { 
-  Send, 
-  MessageSquare, 
-  Image as ImageIcon, 
-  Check, 
+import {
+  Send,
+  MessageSquare,
+  Image as ImageIcon,
+  Check,
   CheckCheck,
   WifiOff,
   Loader2,
   Bell,
-  BellOff
+  BellOff,
+  ArrowLeft
 } from "lucide-react";
 import { format, isToday, isYesterday, isSameDay } from "date-fns";
 
@@ -396,18 +397,19 @@ useEffect(() => {
   return (
     <div className="h-[calc(100vh-8rem)]">
       <div className="grid md:grid-cols-[320px_1fr] gap-4 h-full">
-        {/* Conversations List */}
-        <Card className="border-card-border">
+        {/* Conversations List - Hidden on mobile when conversation is selected */}
+        <Card className={`border-card-border ${selectedConversation ? 'hidden md:block' : 'block'}`}>
           <CardContent className="p-0">
             <div className="p-4 border-b flex items-center justify-between">
-              <h2 className="font-semibold">Messages</h2>
+              <h2 className="font-semibold text-lg">Messages</h2>
               <Button
                 variant="ghost"
                 size="icon"
                 onClick={toggleSound}
                 data-testid="button-toggle-sound"
+                className="h-10 w-10"
               >
-                {soundEnabled ? <Bell className="h-4 w-4" /> : <BellOff className="h-4 w-4" />}
+                {soundEnabled ? <Bell className="h-5 w-5" /> : <BellOff className="h-5 w-5" />}
               </Button>
             </div>
             <ScrollArea className="h-[calc(100vh-12rem)]">
@@ -425,29 +427,29 @@ useEffect(() => {
                     <button
                       key={conversation.id}
                       onClick={() => setSelectedConversation(conversation.id)}
-                      className={`w-full p-4 text-left hover-elevate ${
-                        selectedConversation === conversation.id ? 'bg-accent' : ''
+                      className={`w-full p-4 sm:p-3 text-left hover-elevate transition-colors min-h-[80px] sm:min-h-0 ${
+                        selectedConversation === conversation.id ? 'bg-accent' : 'hover:bg-accent/50'
                       }`}
                       data-testid={`conversation-${conversation.id}`}
                     >
-                      <div className="flex gap-3">
-                        <Avatar>
+                      <div className="flex gap-3 items-start">
+                        <Avatar className="h-12 w-12 sm:h-10 sm:w-10 shrink-0">
                           <AvatarImage src={conversation.otherUser?.profileImageUrl} />
                           <AvatarFallback>
                             {getAvatarFallback(conversation.otherUser)}
                           </AvatarFallback>
                         </Avatar>
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="font-semibold truncate">
+                          <div className="flex items-center justify-between gap-2 mb-1">
+                            <div className="font-semibold truncate text-base sm:text-sm">
                               {getDisplayName(conversation.otherUser)}
                             </div>
-                            <div className="text-xs text-muted-foreground">
+                            <div className="text-xs text-muted-foreground shrink-0">
                               {conversation.lastMessageAt &&
                                 formatMessageDate(conversation.lastMessageAt)}
                             </div>
                           </div>
-                          <div className="text-sm text-muted-foreground truncate">
+                          <div className="text-sm text-muted-foreground truncate font-medium">
                             {conversation.offer?.title}
                           </div>
                           {conversation.lastMessage && (
@@ -470,11 +472,11 @@ useEffect(() => {
           </CardContent>
         </Card>
 
-        {/* Messages View */}
-        <Card className="border-card-border flex flex-col">
+        {/* Messages View - Show on mobile when conversation selected */}
+        <Card className={`border-card-border flex flex-col ${!selectedConversation ? 'hidden md:flex' : 'flex'}`}>
           {!selectedConversation ? (
             <div className="flex-1 flex items-center justify-center">
-              <div className="text-center">
+              <div className="text-center px-4">
                 <MessageSquare className="h-12 w-12 text-muted-foreground/50 mx-auto mb-4" />
                 <p className="text-muted-foreground">Select a conversation to start messaging</p>
                 <p className="text-sm text-muted-foreground mt-2">
@@ -484,21 +486,30 @@ useEffect(() => {
             </div>
           ) : (
             <>
-              {/* Header */}
+              {/* Header with back button on mobile */}
               <div className="p-4 border-b">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <Avatar>
+                    {/* Back button for mobile */}
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setSelectedConversation(null)}
+                      className="md:hidden h-10 w-10 shrink-0"
+                    >
+                      <ArrowLeft className="h-5 w-5" />
+                    </Button>
+                    <Avatar className="h-10 w-10 shrink-0">
                       <AvatarImage src={otherUser?.profileImageUrl} />
                       <AvatarFallback>
                         {getAvatarFallback(otherUser)}
                       </AvatarFallback>
                     </Avatar>
-                    <div>
-                      <h3 className="font-semibold">
+                    <div className="min-w-0 flex-1">
+                      <h3 className="font-semibold truncate">
                         {getDisplayName(otherUser)}
                       </h3>
-                      <p className="text-sm text-muted-foreground">
+                      <p className="text-sm text-muted-foreground truncate">
                         {conversations?.find((c: any) => c.id === selectedConversation)?.offer?.title}
                       </p>
                     </div>
@@ -550,13 +561,13 @@ useEffect(() => {
                           }`}
                         >
                           <div
-                            className={`max-w-[70%] rounded-lg p-3 ${
+                            className={`max-w-[85%] sm:max-w-[70%] rounded-2xl px-4 py-2.5 ${
                               isOwnMessage
-                                ? 'bg-primary text-primary-foreground'
-                                : 'bg-muted'
+                                ? 'bg-primary text-primary-foreground rounded-br-md'
+                                : 'bg-muted rounded-bl-md'
                             }`}
                           >
-                            <p className="text-sm whitespace-pre-wrap break-words">{message.content}</p>
+                            <p className="text-sm sm:text-base whitespace-pre-wrap break-words leading-relaxed">{message.content}</p>
                             <div className="flex items-center justify-end gap-1 mt-1">
                               <p className="text-xs opacity-70">
                                 {format(new Date(message.createdAt), 'h:mm a')}
@@ -594,16 +605,17 @@ useEffect(() => {
                 </div>
               </ScrollArea>
 
-              {/* Input */}
-              <div className="p-4 border-t">
+              {/* Input - Better mobile touch targets */}
+              <div className="p-3 sm:p-4 border-t bg-background">
                 <div className="flex gap-2">
-                  <Button 
-                    variant="outline" 
-                    size="icon" 
+                  <Button
+                    variant="outline"
+                    size="icon"
                     data-testid="button-attach-image"
                     disabled
+                    className="h-11 w-11 shrink-0"
                   >
-                    <ImageIcon className="h-4 w-4" />
+                    <ImageIcon className="h-5 w-5" />
                   </Button>
                   <Input
                     ref={messageInputRef}
@@ -621,13 +633,16 @@ useEffect(() => {
                     }}
                     disabled={!isConnected}
                     data-testid="input-message"
+                    className="h-11 text-base"
                   />
                   <Button
                     onClick={() => sendMessage()}
                     disabled={!messageText.trim() || !isConnected}
                     data-testid="button-send-message"
+                    className="h-11 w-11 sm:w-auto sm:px-4 shrink-0"
                   >
-                    <Send className="h-4 w-4" />
+                    <Send className="h-5 w-5" />
+                    <span className="hidden sm:inline ml-2">Send</span>
                   </Button>
                 </div>
                 {!isConnected && (
