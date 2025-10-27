@@ -132,9 +132,9 @@ useEffect(() => {
   if (!isAuthenticated) return;
 
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-  const host = window.location.hostname;
-  const port = window.location.port || '3000';
-  const wsUrl = `${protocol}//${host}:${port}/ws`;
+  // For cloud environments (Codespaces, etc.), use window.location.host directly
+  // This includes the forwarded port in the hostname, so we don't add :port again
+  const wsUrl = `${protocol}//${window.location.host}/ws`;
   
   let shouldReconnect = true; // Per-effect reconnect flag
   
