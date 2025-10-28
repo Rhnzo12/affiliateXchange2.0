@@ -1,7 +1,7 @@
 // path: src/server/storage.ts
 import { randomUUID } from "crypto";
 import { eq, and, desc, sql, count } from "drizzle-orm";
-import { db } from "./db";
+import { db, pool } from "./db";
 import * as geoip from "geoip-lite";
 import {
   users,
@@ -65,6 +65,39 @@ import {
  *  - 42704: undefined_object / undefined_object type
  */
 const MISSING_SCHEMA_CODES = new Set(["42P01", "42704"]);
+const MISSING_COLUMN_CODES = new Set(["42703"]);
+
+const NOTIFICATION_OPTIONAL_COLUMNS = [
+  "type",
+  "title",
+  "user_id",
+  "metadata",
+  "message",
+  "link_url",
+  "is_read",
+  "read_at",
+  "created_at",
+];
+
+const REVIEW_OPTIONAL_COLUMNS = [
+  "category_ratings",
+  "status",
+  "edited_by_admin",
+  "admin_notes",
+  "overall_rating",
+  "payment_speed_rating",
+  "communication_rating",
+  "offer_quality_rating",
+  "support_rating",
+  "company_response",
+  "company_responded_at",
+  "is_edited",
+  "admin_note",
+  "is_approved",
+  "approved_by",
+  "approved_at",
+  "is_hidden",
+];
 
 function isMissingRelationError(error: unknown, relation: string): boolean {
   if (!error || typeof error !== "object") return false;
@@ -100,6 +133,47 @@ function isMissingRelationError(error: unknown, relation: string): boolean {
       if (relationName === target || relationName.endsWith(`.${target}`)) return true;
     }
   }
+
+  return false;
+}
+
+function isMissingColumnError(error: unknown, relation: string, columns: string[] = []): boolean {
+  if (!error || typeof error !== "object") return false;
+
+  const { code, message } = error as { code?: string; message?: unknown };
+  const normalizedRelation = relation.toLowerCase();
+
+  const matchesColumns = (text: string) => {
+    if (!columns.length) return true;
+    const normalizedText = text.toLowerCase();
+    return columns.some((column) => normalizedText.includes(column.toLowerCase()));
+  };
+
+  const inspect = (value: unknown) => {
+    if (typeof value !== "string") return false;
+    const normalized = value.toLowerCase();
+    if (!normalized.includes("column")) return false;
+
+    // Messages commonly look like:
+    //   column "overall_rating" does not exist
+    //   column "overall_rating" of relation "reviews" does not exist
+    //   column "public.notifications.metadata" does not exist
+    const mentionsRelation = normalized.includes(normalizedRelation);
+    const mentionsMissingColumn =
+      normalized.includes("does not exist") && matchesColumns(normalized);
+
+    if (mentionsRelation && matchesColumns(normalized)) return true;
+    if (mentionsMissingColumn) return true;
+
+    return false;
+  };
+
+  if (typeof code === "string" && MISSING_COLUMN_CODES.has(code)) {
+    if (inspect(message)) return true;
+    if (typeof message !== "string") return true;
+  }
+
+  if (inspect(message)) return true;
 
   return false;
 }
@@ -193,6 +267,276 @@ function isMissingNotificationSchema(error: unknown): boolean {
     isMissingRelationError(error, "notifications") ||
     isMissingRelationError(error, "notification_type")
   );
+}
+
+function isLegacyNotificationColumnError(error: unknown): boolean {
+  return isMissingColumnError(error, "notifications", NOTIFICATION_OPTIONAL_COLUMNS);
+}
+
+function isLegacyReviewColumnError(error: unknown): boolean {
+  return isMissingColumnError(error, "reviews", REVIEW_OPTIONAL_COLUMNS);
+}
+
+function safeParseJson<T = unknown>(value: unknown): T | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value !== "string") return value as T;
+  try {
+    return JSON.parse(value) as T;
+  } catch {
+    return value as T;
+  }
+}
+
+function coerceDate(value: unknown): Date {
+  if (value instanceof Date) return value;
+  if (typeof value === "string" || typeof value === "number") {
+    const result = new Date(value);
+    if (!Number.isNaN(result.getTime())) {
+      return result;
+    }
+  }
+  return new Date();
+}
+
+function coerceBoolean(value: unknown, fallback: boolean = false): boolean {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value !== 0;
+  if (typeof value === "string") {
+    const normalized = value.toLowerCase();
+    if (["true", "t", "1", "yes"].includes(normalized)) return true;
+    if (["false", "f", "0", "no"].includes(normalized)) return false;
+  }
+  return fallback;
+}
+
+function coerceNumberValue(value: unknown, fallback: number = 0): number {
+  if (typeof value === "number") return value;
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    if (!Number.isNaN(parsed)) return parsed;
+  }
+  if (typeof value === "bigint") return Number(value);
+  return fallback;
+}
+
+function coerceOptionalNumber(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "number") return value;
+  if (typeof value === "bigint") return Number(value);
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    return Number.isNaN(parsed) ? null : parsed;
+  }
+  return null;
+}
+
+async function getExistingColumns(table: string): Promise<Set<string>> {
+  try {
+    const result = await pool.query(
+      `SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = $1`,
+      [table],
+    );
+    return new Set(result.rows.map((row: any) => row.column_name as string));
+  } catch (error) {
+    console.warn(`[Storage] Unable to inspect columns for ${table}:`, error);
+    return new Set();
+  }
+}
+
+function mapLegacyNotificationRow(
+  row: any,
+  columns: Set<string>,
+  fallbackUserId: string,
+): Notification {
+  const metadataValue = columns.has("metadata") ? row.metadata ?? null : null;
+  const messageCandidate =
+    (columns.has("message") ? row.message : undefined) ??
+    row.content ??
+    row.body ??
+    row.description ??
+    "";
+  const normalizedMessage =
+    typeof messageCandidate === "string"
+      ? messageCandidate
+      : messageCandidate
+        ? JSON.stringify(messageCandidate)
+        : "";
+
+  const titleCandidate =
+    (columns.has("title") ? row.title : undefined) ??
+    row.subject ??
+    (normalizedMessage ? normalizedMessage.slice(0, 120) : null);
+
+  return {
+    id: row.id ?? randomUUID(),
+    userId: row.user_id ?? fallbackUserId,
+    type: row.type ?? "system_announcement",
+    title: titleCandidate || "Notification",
+    message: normalizedMessage || titleCandidate || "Notification update",
+    linkUrl: columns.has("link_url") ? row.link_url ?? null : null,
+    metadata: safeParseJson(metadataValue),
+    isRead: columns.has("is_read") ? coerceBoolean(row.is_read, false) : false,
+    readAt: columns.has("read_at") && row.read_at ? coerceDate(row.read_at) : null,
+    createdAt: columns.has("created_at") && row.created_at ? coerceDate(row.created_at) : new Date(),
+  };
+}
+
+async function legacyFetchNotifications(
+  userId: string,
+  options: { limit?: number; unreadOnly?: boolean; columns?: Set<string> } = {},
+): Promise<Notification[]> {
+  const columns = options.columns ?? (await getExistingColumns("notifications"));
+  if (!columns.size) return [];
+
+  const where: string[] = ["user_id = $1"];
+  const params: any[] = [userId];
+  let paramIndex = 2;
+
+  if (options.unreadOnly && columns.has("is_read")) {
+    where.push("(is_read = false OR is_read IS NULL)");
+  }
+
+  const orderColumn = columns.has("created_at") ? "created_at" : "id";
+  let limitClause = "";
+  if (typeof options.limit === "number") {
+    limitClause = ` LIMIT $${paramIndex++}`;
+    params.push(options.limit);
+  }
+
+  const query = `SELECT * FROM notifications WHERE ${where.join(" AND ")} ORDER BY ${orderColumn} DESC${limitClause}`;
+
+  try {
+    const result = await pool.query(query, params);
+    return result.rows.map((row: any) => mapLegacyNotificationRow(row, columns, userId));
+  } catch (error) {
+    console.warn("[Storage] Legacy notifications query failed:", error);
+    return [];
+  }
+}
+
+async function legacyFetchUnreadNotifications(userId: string): Promise<Notification[]> {
+  const columns = await getExistingColumns("notifications");
+  if (!columns.size) return [];
+
+  if (!columns.has("is_read")) {
+    // Without an is_read column, treat all notifications as unread.
+    return legacyFetchNotifications(userId, { columns });
+  }
+
+  return legacyFetchNotifications(userId, { columns, unreadOnly: true });
+}
+
+async function legacyCountUnreadNotifications(userId: string): Promise<number> {
+  const columns = await getExistingColumns("notifications");
+  if (!columns.size) return 0;
+
+  const baseQuery = columns.has("is_read")
+    ? `SELECT COUNT(*) AS count FROM notifications WHERE user_id = $1 AND (is_read = false OR is_read IS NULL)`
+    : `SELECT COUNT(*) AS count FROM notifications WHERE user_id = $1`;
+
+  try {
+    const result = await pool.query(baseQuery, [userId]);
+    return coerceCount(result.rows[0]?.count ?? 0);
+  } catch (error) {
+    console.warn("[Storage] Legacy unread notification count failed:", error);
+    return 0;
+  }
+}
+
+function mapLegacyReviewRow(row: any, columns: Set<string>): Review {
+  const createdAt = columns.has("created_at") && row.created_at ? coerceDate(row.created_at) : new Date();
+  const updatedAt = columns.has("updated_at") && row.updated_at ? coerceDate(row.updated_at) : createdAt;
+
+  const categoryRatings = columns.has("category_ratings")
+    ? safeParseJson<Record<string, unknown>>(row.category_ratings) ?? {}
+    : {};
+
+  const readCategoryRating = (...keys: string[]): number | null => {
+    for (const key of keys) {
+      if (categoryRatings && typeof categoryRatings === "object" && key in categoryRatings) {
+        const value = (categoryRatings as Record<string, unknown>)[key];
+        const coerced = coerceOptionalNumber(value);
+        if (coerced !== null) return coerced;
+      }
+    }
+    return null;
+  };
+
+  const statusValue = columns.has("status") && typeof row.status === "string" ? row.status.toLowerCase() : null;
+  const isPending = statusValue ? ["pending", "under_review", "flagged"].includes(statusValue) : false;
+  const isHiddenByStatus = statusValue ? ["hidden", "flagged", "removed"].includes(statusValue) : false;
+
+  return {
+    id: row.id ?? randomUUID(),
+    applicationId: row.application_id ?? row.applicationId ?? "",
+    creatorId: row.creator_id ?? row.creatorId ?? "",
+    companyId: row.company_id ?? row.companyId ?? "",
+    reviewText: row.review_text ?? row.review ?? row.text ?? null,
+    overallRating:
+      coerceNumberValue(
+        row.overall_rating ??
+          row.rating ??
+          readCategoryRating("overall", "overallRating", "rating") ??
+          0,
+      ) || 0,
+    paymentSpeedRating:
+      coerceOptionalNumber(row.payment_speed_rating ?? row.payment_speed) ??
+      readCategoryRating("payment_speed", "paymentSpeed"),
+    communicationRating:
+      coerceOptionalNumber(row.communication_rating ?? row.communication) ??
+      readCategoryRating("communication", "communication_rating"),
+    offerQualityRating:
+      coerceOptionalNumber(row.offer_quality_rating ?? row.offer_quality) ??
+      readCategoryRating("offer_quality", "offerQuality"),
+    supportRating:
+      coerceOptionalNumber(row.support_rating) ?? readCategoryRating("support", "support_rating"),
+    companyResponse: columns.has("company_response") ? row.company_response ?? null : null,
+    companyRespondedAt:
+      columns.has("company_responded_at") && row.company_responded_at
+        ? coerceDate(row.company_responded_at)
+        : null,
+    isEdited:
+      columns.has("is_edited")
+        ? coerceBoolean(row.is_edited, false)
+        : columns.has("edited_by_admin")
+          ? coerceBoolean(row.edited_by_admin, false)
+          : false,
+    adminNote:
+      columns.has("admin_note")
+        ? row.admin_note ?? null
+        : columns.has("admin_notes")
+          ? row.admin_notes ?? null
+          : null,
+    isApproved:
+      columns.has("is_approved")
+        ? coerceBoolean(row.is_approved, true)
+        : statusValue
+          ? !isPending && statusValue !== "rejected"
+          : true,
+    approvedBy: columns.has("approved_by") ? row.approved_by ?? null : null,
+    approvedAt: columns.has("approved_at") && row.approved_at ? coerceDate(row.approved_at) : null,
+    isHidden:
+      columns.has("is_hidden")
+        ? coerceBoolean(row.is_hidden, false)
+        : isHiddenByStatus,
+    createdAt,
+    updatedAt,
+  };
+}
+
+async function legacyFetchReviews(): Promise<Review[]> {
+  const columns = await getExistingColumns("reviews");
+  if (!columns.size) return [];
+
+  const orderColumn = columns.has("created_at") ? "created_at" : "id";
+
+  try {
+    const result = await pool.query(`SELECT * FROM reviews ORDER BY ${orderColumn} DESC`);
+    return result.rows.map((row: any) => mapLegacyReviewRow(row, columns));
+  } catch (error) {
+    console.warn("[Storage] Legacy reviews query failed:", error);
+    return [];
+  }
 }
 
 export interface AdminCreatorSummary {
@@ -980,6 +1324,13 @@ export class DatabaseStorage implements IStorage {
         .where(eq(reviews.companyId, companyId))
         .orderBy(desc(reviews.createdAt));
     } catch (error) {
+      if (isLegacyReviewColumnError(error)) {
+        console.warn(
+          "[Storage] reviews column mismatch while fetching company reviews - attempting legacy fallback.",
+        );
+        const all = await legacyFetchReviews();
+        return all.filter((review) => review.companyId === companyId);
+      }
       if (isMissingRelationError(error, "reviews")) {
         console.warn(
           "[Storage] reviews relation missing while fetching company reviews - returning empty array.",
@@ -1003,6 +1354,12 @@ export class DatabaseStorage implements IStorage {
         .returning();
       return result[0];
     } catch (error) {
+      if (isLegacyReviewColumnError(error)) {
+        console.warn(
+          "[Storage] reviews column mismatch while creating review - returning ephemeral review.",
+        );
+        return buildEphemeralReview(review);
+      }
       if (isMissingRelationError(error, "reviews")) {
         console.warn(
           "[Storage] reviews relation missing while creating review - returning ephemeral review.",
@@ -1022,6 +1379,12 @@ export class DatabaseStorage implements IStorage {
         .returning();
       return result[0];
     } catch (error) {
+      if (isLegacyReviewColumnError(error)) {
+        console.warn(
+          "[Storage] reviews column mismatch while updating review - treating as no-op.",
+        );
+        return undefined;
+      }
       if (isMissingRelationError(error, "reviews")) {
         console.warn("[Storage] reviews relation missing while updating review - treating as no-op.");
         return undefined;
@@ -1034,6 +1397,12 @@ export class DatabaseStorage implements IStorage {
     try {
       return await db.select().from(reviews).orderBy(desc(reviews.createdAt));
     } catch (error) {
+      if (isLegacyReviewColumnError(error)) {
+        console.warn(
+          "[Storage] reviews column mismatch while fetching all reviews - attempting legacy fallback.",
+        );
+        return legacyFetchReviews();
+      }
       if (isMissingRelationError(error, "reviews")) {
         console.warn(
           "[Storage] reviews relation missing while fetching all reviews - returning empty array.",
@@ -1053,6 +1422,10 @@ export class DatabaseStorage implements IStorage {
         .returning();
       return result[0];
     } catch (error) {
+      if (isLegacyReviewColumnError(error)) {
+        console.warn("[Storage] reviews column mismatch while hiding review - treating as no-op.");
+        return undefined;
+      }
       if (isMissingRelationError(error, "reviews")) {
         console.warn("[Storage] reviews relation missing while hiding review - treating as no-op.");
         return undefined;
@@ -1065,6 +1438,10 @@ export class DatabaseStorage implements IStorage {
     try {
       await db.delete(reviews).where(eq(reviews.id, id));
     } catch (error) {
+      if (isLegacyReviewColumnError(error)) {
+        console.warn("[Storage] reviews column mismatch while deleting review - skipping operation.");
+        return;
+      }
       if (isMissingRelationError(error, "reviews")) {
         console.warn("[Storage] reviews relation missing while deleting review - skipping operation.");
         return;
@@ -1085,6 +1462,12 @@ export class DatabaseStorage implements IStorage {
         .returning();
       return result[0];
     } catch (error) {
+      if (isLegacyReviewColumnError(error)) {
+        console.warn(
+          "[Storage] reviews column mismatch while updating admin note - treating as no-op.",
+        );
+        return undefined;
+      }
       if (isMissingRelationError(error, "reviews")) {
         console.warn(
           "[Storage] reviews relation missing while updating admin note - treating as no-op.",
@@ -1110,6 +1493,12 @@ export class DatabaseStorage implements IStorage {
         .returning();
       return result[0];
     } catch (error) {
+      if (isLegacyReviewColumnError(error)) {
+        console.warn(
+          "[Storage] reviews column mismatch while approving review - treating as no-op.",
+        );
+        return undefined;
+      }
       if (isMissingRelationError(error, "reviews")) {
         console.warn(
           "[Storage] reviews relation missing while approving review - treating as no-op.",
@@ -1837,6 +2226,12 @@ export class DatabaseStorage implements IStorage {
         .returning();
       return result[0];
     } catch (error) {
+      if (isLegacyNotificationColumnError(error)) {
+        console.warn(
+          "[Storage] notifications column mismatch while creating notification - returning ephemeral notification.",
+        );
+        return buildEphemeralNotification(notification);
+      }
       if (isMissingNotificationSchema(error)) {
         console.warn(
           "[Storage] notifications relation missing while creating notification - returning ephemeral notification.",
@@ -1857,6 +2252,12 @@ export class DatabaseStorage implements IStorage {
         .limit(limit);
       return results;
     } catch (error) {
+      if (isLegacyNotificationColumnError(error)) {
+        console.warn(
+          "[Storage] notifications column mismatch while fetching notifications - attempting legacy fallback.",
+        );
+        return legacyFetchNotifications(userId, { limit });
+      }
       if (isMissingNotificationSchema(error)) {
         console.warn(
           "[Storage] notifications relation missing while fetching notifications - returning empty array.",
@@ -1876,6 +2277,12 @@ export class DatabaseStorage implements IStorage {
         .orderBy(desc(notifications.createdAt));
       return results;
     } catch (error) {
+      if (isLegacyNotificationColumnError(error)) {
+        console.warn(
+          "[Storage] notifications column mismatch while fetching unread notifications - attempting legacy fallback.",
+        );
+        return legacyFetchUnreadNotifications(userId);
+      }
       if (isMissingNotificationSchema(error)) {
         console.warn(
           "[Storage] notifications relation missing while fetching unread notifications - returning empty array.",
@@ -1894,6 +2301,12 @@ export class DatabaseStorage implements IStorage {
         .where(and(eq(notifications.userId, userId), eq(notifications.isRead, false)));
       return coerceCount(result[0]?.count ?? 0);
     } catch (error) {
+      if (isLegacyNotificationColumnError(error)) {
+        console.warn(
+          "[Storage] notifications column mismatch while counting unread notifications - attempting legacy fallback.",
+        );
+        return legacyCountUnreadNotifications(userId);
+      }
       if (isMissingNotificationSchema(error)) {
         console.warn(
           "[Storage] notifications relation missing while counting unread notifications - returning 0.",
@@ -1913,6 +2326,12 @@ export class DatabaseStorage implements IStorage {
         .returning();
       return result[0];
     } catch (error) {
+      if (isLegacyNotificationColumnError(error)) {
+        console.warn(
+          "[Storage] notifications column mismatch while marking notification as read - treating as already handled.",
+        );
+        return undefined;
+      }
       if (isMissingNotificationSchema(error)) {
         console.warn(
           "[Storage] notifications relation missing while marking notification as read - treating as already handled.",
@@ -1930,6 +2349,12 @@ export class DatabaseStorage implements IStorage {
         .set({ isRead: true, readAt: new Date() })
         .where(and(eq(notifications.userId, userId), eq(notifications.isRead, false)));
     } catch (error) {
+      if (isLegacyNotificationColumnError(error)) {
+        console.warn(
+          "[Storage] notifications column mismatch while marking all notifications as read - skipping operation.",
+        );
+        return;
+      }
       if (isMissingNotificationSchema(error)) {
         console.warn(
           "[Storage] notifications relation missing while marking all notifications as read - skipping operation.",
@@ -1944,6 +2369,12 @@ export class DatabaseStorage implements IStorage {
     try {
       await db.delete(notifications).where(eq(notifications.id, id));
     } catch (error) {
+      if (isLegacyNotificationColumnError(error)) {
+        console.warn(
+          "[Storage] notifications column mismatch while deleting notification - skipping operation.",
+        );
+        return;
+      }
       if (isMissingNotificationSchema(error)) {
         console.warn(
           "[Storage] notifications relation missing while deleting notification - skipping operation.",
@@ -1958,6 +2389,12 @@ export class DatabaseStorage implements IStorage {
     try {
       await db.delete(notifications).where(eq(notifications.userId, userId));
     } catch (error) {
+      if (isLegacyNotificationColumnError(error)) {
+        console.warn(
+          "[Storage] notifications column mismatch while clearing notifications - skipping operation.",
+        );
+        return;
+      }
       if (isMissingNotificationSchema(error)) {
         console.warn(
           "[Storage] notifications relation missing while clearing notifications - skipping operation.",
