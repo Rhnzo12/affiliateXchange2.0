@@ -1,3 +1,4 @@
+// path: src/server/storage.ts
 import { randomUUID } from "crypto";
 import { eq, and, desc, sql, count } from "drizzle-orm";
 import { db } from "./db";
@@ -58,50 +59,45 @@ import {
   type InsertUserNotificationPreferences,
 } from "@shared/schema";
 
+/**
+ * Postgres error codes related to missing schema objects:
+ *  - 42P01: undefined_table
+ *  - 42704: undefined_object / undefined_object type
+ */
 const MISSING_SCHEMA_CODES = new Set(["42P01", "42704"]);
 
 function isMissingRelationError(error: unknown, relation: string): boolean {
-  if (!error || typeof error !== "object") {
-    return false;
-  }
+  if (!error || typeof error !== "object") return false;
 
   const { code, message } = error as { code?: string; message?: unknown };
 
+  // If error code hints at missing objects, prefer message inspection when present.
   if (typeof code === "string" && MISSING_SCHEMA_CODES.has(code)) {
-    if (typeof message !== "string") {
-      return true;
-    }
+    if (typeof message !== "string") return true; // No message to verify, still safe to treat as missing.
 
     const normalized = message.toLowerCase();
     const target = relation.toLowerCase();
 
-    if (normalized.includes(target)) {
-      return true;
-    }
+    if (normalized.includes(target)) return true;
   }
 
   if (typeof message === "string") {
+    // Fast exact check with original casing for common path.
+    if (message.includes(`relation "${relation}" does not exist`)) return true;
+
+    // Robust checks with normalized forms.
     const normalized = message.toLowerCase();
     const target = relation.toLowerCase();
 
-    if (normalized.includes(`relation "${target}" does not exist`)) {
-      return true;
-    }
+    if (normalized.includes(`relation "${target}" does not exist`)) return true;
+    if (normalized.includes(`table "${target}" does not exist`)) return true;
+    if (normalized.includes(`type "${target}" does not exist`)) return true;
 
-    if (normalized.includes(`table "${target}" does not exist`)) {
-      return true;
-    }
-
-    if (normalized.includes(`type "${target}" does not exist`)) {
-      return true;
-    }
-
+    // Regex catch-all; supports relation|table|type and schema-qualified names
     const match = normalized.match(/(?:relation|table|type) "([^"\\]+)" does not exist/);
     if (match) {
       const relationName = match[1];
-      if (relationName === target || relationName.endsWith(`.${target}`)) {
-        return true;
-      }
+      if (relationName === target || relationName.endsWith(`.${target}`)) return true;
     }
   }
 
@@ -109,19 +105,12 @@ function isMissingRelationError(error: unknown, relation: string): boolean {
 }
 
 function coerceCount(value: unknown): number {
-  if (typeof value === "number") {
-    return value;
-  }
-
-  if (typeof value === "bigint") {
-    return Number(value);
-  }
-
+  if (typeof value === "number") return value;
+  if (typeof value === "bigint") return Number(value);
   if (typeof value === "string") {
     const parsed = Number(value);
     return Number.isNaN(parsed) ? 0 : parsed;
   }
-
   return 0;
 }
 
@@ -199,6 +188,7 @@ function buildDefaultNotificationPreferences(userId: string): UserNotificationPr
 }
 
 function isMissingNotificationSchema(error: unknown): boolean {
+  // Some Postgres setups emit missing enum/type for notification_type as well.
   return (
     isMissingRelationError(error, "notifications") ||
     isMissingRelationError(error, "notification_type")
@@ -214,13 +204,16 @@ export interface AdminCreatorSummary {
   profileImageUrl: string | null;
   accountStatus: User["accountStatus"];
   createdAt: Date | null;
-  profile: {
-    bio: string | null;
-    youtubeFollowers: number | null;
-    tiktokFollowers: number | null;
-    instagramFollowers: number | null;
-  } | null;
+  profile:
+    | {
+        bio: string | null;
+        youtubeFollowers: number | null;
+        tiktokFollowers: number | null;
+        instagramFollowers: number | null;
+      }
+    | null;
 }
+
 export interface IStorage {
   // Users
   getUser(id: string): Promise<User | undefined>;
@@ -272,7 +265,11 @@ export interface IStorage {
 
   // Messages & Conversations
   getConversation(id: string): Promise<any>;
-  getConversationsByUser(userId: string, userRole: string, companyProfileId?: string | null): Promise<any[]>;
+  getConversationsByUser(
+    userId: string,
+    userRole: string,
+    companyProfileId?: string | null,
+  ): Promise<any[]>;
   createConversation(data: any): Promise<any>;
   createMessage(message: InsertMessage): Promise<Message>;
   getMessages(conversationId: string): Promise<Message[]>;
@@ -293,7 +290,10 @@ export interface IStorage {
   getAnalyticsByCreator(creatorId: string): Promise<any>;
   getAnalyticsTimeSeriesByCreator(creatorId: string, dateRange: string): Promise<any[]>;
   getAnalyticsByApplication(applicationId: string): Promise<any[]>;
-  logTrackingClick(applicationId: string, clickData: { ip: string; userAgent: string; referer: string; timestamp: Date }): Promise<void>;
+  logTrackingClick(
+    applicationId: string,
+    clickData: { ip: string; userAgent: string; referer: string; timestamp: Date },
+  ): Promise<void>;
   recordConversion(applicationId: string, saleAmount?: number): Promise<void>;
 
   // Payment Settings
@@ -351,8 +351,13 @@ export interface IStorage {
 
   // User Notification Preferences
   getUserNotificationPreferences(userId: string): Promise<UserNotificationPreferences | null>;
-  createUserNotificationPreferences(preferences: InsertUserNotificationPreferences): Promise<UserNotificationPreferences>;
-  updateUserNotificationPreferences(userId: string, updates: Partial<InsertUserNotificationPreferences>): Promise<UserNotificationPreferences | undefined>;
+  createUserNotificationPreferences(
+    preferences: InsertUserNotificationPreferences,
+  ): Promise<UserNotificationPreferences>;
+  updateUserNotificationPreferences(
+    userId: string,
+    updates: Partial<InsertUserNotificationPreferences>,
+  ): Promise<UserNotificationPreferences | undefined>;
 
   // Admin
   getCreatorsForAdmin(): Promise<AdminCreatorSummary[]>;
@@ -398,12 +403,15 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createUser(user: InsertUser): Promise<User> {
-    const result = await db.insert(users).values({
-      ...user,
-      id: randomUUID(),
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    }).returning();
+    const result = await db
+      .insert(users)
+      .values({
+        ...user,
+        id: randomUUID(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .returning();
     return result[0];
   }
 
@@ -418,21 +426,31 @@ export class DatabaseStorage implements IStorage {
 
   // Creator Profiles
   async getCreatorProfile(userId: string): Promise<CreatorProfile | undefined> {
-    const result = await db.select().from(creatorProfiles).where(eq(creatorProfiles.userId, userId)).limit(1);
+    const result = await db
+      .select()
+      .from(creatorProfiles)
+      .where(eq(creatorProfiles.userId, userId))
+      .limit(1);
     return result[0];
   }
 
   async createCreatorProfile(profile: InsertCreatorProfile): Promise<CreatorProfile> {
-    const result = await db.insert(creatorProfiles).values({
-      ...profile,
-      id: randomUUID(),
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    }).returning();
+    const result = await db
+      .insert(creatorProfiles)
+      .values({
+        ...profile,
+        id: randomUUID(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .returning();
     return result[0];
   }
 
-  async updateCreatorProfile(userId: string, updates: Partial<InsertCreatorProfile>): Promise<CreatorProfile | undefined> {
+  async updateCreatorProfile(
+    userId: string,
+    updates: Partial<InsertCreatorProfile>,
+  ): Promise<CreatorProfile | undefined> {
     const result = await db
       .update(creatorProfiles)
       .set({ ...updates, updatedAt: new Date() })
@@ -443,26 +461,40 @@ export class DatabaseStorage implements IStorage {
 
   // Company Profiles
   async getCompanyProfile(userId: string): Promise<CompanyProfile | undefined> {
-    const result = await db.select().from(companyProfiles).where(eq(companyProfiles.userId, userId)).limit(1);
+    const result = await db
+      .select()
+      .from(companyProfiles)
+      .where(eq(companyProfiles.userId, userId))
+      .limit(1);
     return result[0];
   }
 
   async getCompanyProfileById(id: string): Promise<CompanyProfile | undefined> {
-    const result = await db.select().from(companyProfiles).where(eq(companyProfiles.id, id)).limit(1);
+    const result = await db
+      .select()
+      .from(companyProfiles)
+      .where(eq(companyProfiles.id, id))
+      .limit(1);
     return result[0];
   }
 
   async createCompanyProfile(profile: InsertCompanyProfile): Promise<CompanyProfile> {
-    const result = await db.insert(companyProfiles).values({
-      ...profile,
-      id: randomUUID(),
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    }).returning();
+    const result = await db
+      .insert(companyProfiles)
+      .values({
+        ...profile,
+        id: randomUUID(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .returning();
     return result[0];
   }
 
-  async updateCompanyProfile(userId: string, updates: Partial<InsertCompanyProfile>): Promise<CompanyProfile | undefined> {
+  async updateCompanyProfile(
+    userId: string,
+    updates: Partial<InsertCompanyProfile>,
+  ): Promise<CompanyProfile | undefined> {
     const result = await db
       .update(companyProfiles)
       .set({ ...updates, updatedAt: new Date() })
@@ -472,13 +504,17 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getPendingCompanies(): Promise<CompanyProfile[]> {
-    return await db.select().from(companyProfiles).where(eq(companyProfiles.status, 'pending')).orderBy(desc(companyProfiles.createdAt));
+    return await db
+      .select()
+      .from(companyProfiles)
+      .where(eq(companyProfiles.status, "pending"))
+      .orderBy(desc(companyProfiles.createdAt));
   }
 
   async approveCompany(companyId: string): Promise<CompanyProfile | undefined> {
     const result = await db
       .update(companyProfiles)
-      .set({ status: 'approved', approvedAt: new Date(), updatedAt: new Date() })
+      .set({ status: "approved", approvedAt: new Date(), updatedAt: new Date() })
       .where(eq(companyProfiles.id, companyId))
       .returning();
     return result[0];
@@ -487,7 +523,7 @@ export class DatabaseStorage implements IStorage {
   async rejectCompany(companyId: string, reason: string): Promise<CompanyProfile | undefined> {
     const result = await db
       .update(companyProfiles)
-      .set({ status: 'rejected', rejectionReason: reason, updatedAt: new Date() })
+      .set({ status: "rejected", rejectionReason: reason, updatedAt: new Date() })
       .where(eq(companyProfiles.id, companyId))
       .returning();
     return result[0];
@@ -499,41 +535,46 @@ export class DatabaseStorage implements IStorage {
     return result[0];
   }
 
-  async getOffers(filters?: any): Promise<Offer[]> {
-    return await db.select().from(offers).where(eq(offers.status, 'approved')).orderBy(desc(offers.createdAt)).limit(100);
+  async getOffers(_filters?: any): Promise<Offer[]> {
+    return await db
+      .select()
+      .from(offers)
+      .where(eq(offers.status, "approved"))
+      .orderBy(desc(offers.createdAt))
+      .limit(100);
   }
 
   async getOffersByCompany(companyId: string): Promise<Offer[]> {
-    return await db.select().from(offers).where(eq(offers.companyId, companyId)).orderBy(desc(offers.createdAt));
+    return await db
+      .select()
+      .from(offers)
+      .where(eq(offers.companyId, companyId))
+      .orderBy(desc(offers.createdAt));
   }
 
   async createOffer(offer: InsertOffer): Promise<Offer> {
-    // Generate UUID for the offer ID
     const offerId = randomUUID();
-    
-    // Generate slug from title
+
     const slug = offer.title
       .toLowerCase()
       .trim()
-      .replace(/[^\w\s-]/g, '')
-      .replace(/\s+/g, '-')
-      .replace(/-+/g, '-')
-      .replace(/^-+|-+$/g, '');
-    
-    // Build commission_details JSONB (required in database)
+      .replace(/[^\w\s-]/g, "")
+      .replace(/\s+/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-+|-+$/g, "");
+
     const commission_details: any = {
       type: offer.commissionType,
     };
-    
-    if (offer.commissionType === 'per_sale' && offer.commissionPercentage) {
+
+    if (offer.commissionType === "per_sale" && offer.commissionPercentage) {
       commission_details.percentage = offer.commissionPercentage;
     }
-    
-    if (offer.commissionType !== 'per_sale' && offer.commissionAmount) {
+
+    if (offer.commissionType !== "per_sale" && offer.commissionAmount) {
       commission_details.amount = offer.commissionAmount;
     }
-    
-    // Use raw SQL to insert with database-specific fields (slug, commission_details)
+
     const result = await db.execute(sql`
       INSERT INTO offers (
         id, company_id, title, slug, short_description, full_description,
@@ -555,7 +596,7 @@ export class DatabaseStorage implements IStorage {
         ${JSON.stringify(commission_details)}::jsonb,
         ${offer.commissionPercentage || null},
         ${offer.commissionAmount || null},
-        ${offer.status || 'pending_review'},
+        ${offer.status || "pending_review"},
         NOW(),
         NOW(),
         ARRAY[]::varchar[],
@@ -568,7 +609,7 @@ export class DatabaseStorage implements IStorage {
       )
       RETURNING *
     `);
-    
+
     return result.rows[0] as Offer;
   }
 
@@ -586,13 +627,17 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getPendingOffers(): Promise<Offer[]> {
-    return await db.select().from(offers).where(eq(offers.status, 'pending_review')).orderBy(desc(offers.createdAt));
+    return await db
+      .select()
+      .from(offers)
+      .where(eq(offers.status, "pending_review"))
+      .orderBy(desc(offers.createdAt));
   }
 
   async approveOffer(offerId: string): Promise<Offer | undefined> {
     const result = await db
       .update(offers)
-      .set({ status: 'approved', approvedAt: new Date(), updatedAt: new Date() })
+      .set({ status: "approved", approvedAt: new Date(), updatedAt: new Date() })
       .where(eq(offers.id, offerId))
       .returning();
     return result[0];
@@ -600,15 +645,22 @@ export class DatabaseStorage implements IStorage {
 
   // Offer Videos
   async getOfferVideos(offerId: string): Promise<OfferVideo[]> {
-    return await db.select().from(offerVideos).where(eq(offerVideos.offerId, offerId)).orderBy(offerVideos.orderIndex);
+    return await db
+      .select()
+      .from(offerVideos)
+      .where(eq(offerVideos.offerId, offerId))
+      .orderBy(offerVideos.orderIndex);
   }
 
   async createOfferVideo(video: InsertOfferVideo): Promise<OfferVideo> {
-    const result = await db.insert(offerVideos).values({
-      ...video,
-      id: randomUUID(),
-      createdAt: new Date(),
-    }).returning();
+    const result = await db
+      .insert(offerVideos)
+      .values({
+        ...video,
+        id: randomUUID(),
+        createdAt: new Date(),
+      })
+      .returning();
     return result[0];
   }
 
@@ -623,39 +675,58 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getApplicationByTrackingCode(trackingCode: string): Promise<Application | undefined> {
-    const result = await db.select().from(applications).where(eq(applications.trackingCode, trackingCode)).limit(1);
+    const result = await db
+      .select()
+      .from(applications)
+      .where(eq(applications.trackingCode, trackingCode))
+      .limit(1);
     return result[0];
   }
 
   async getApplicationsByCreator(creatorId: string): Promise<Application[]> {
     try {
-      const result = await db.select().from(applications).where(eq(applications.creatorId, creatorId)).orderBy(desc(applications.createdAt));
+      const result = await db
+        .select()
+        .from(applications)
+        .where(eq(applications.creatorId, creatorId))
+        .orderBy(desc(applications.createdAt));
       return result || [];
     } catch (error) {
-      console.error('[getApplicationsByCreator] Error:', error);
+      console.error("[getApplicationsByCreator] Error:", error);
       return [];
     }
   }
 
   async getApplicationsByOffer(offerId: string): Promise<Application[]> {
-    return await db.select().from(applications).where(eq(applications.offerId, offerId)).orderBy(desc(applications.createdAt));
+    return await db
+      .select()
+      .from(applications)
+      .where(eq(applications.offerId, offerId))
+      .orderBy(desc(applications.createdAt));
   }
 
   async getAllPendingApplications(): Promise<Application[]> {
-    return await db.select().from(applications).where(eq(applications.status, 'pending')).orderBy(applications.autoApprovalScheduledAt);
+    return await db
+      .select()
+      .from(applications)
+      .where(eq(applications.status, "pending"))
+      .orderBy(applications.autoApprovalScheduledAt);
   }
 
   async createApplication(application: InsertApplication): Promise<Application> {
     const autoApprovalTime = new Date();
-    autoApprovalTime.setMinutes(autoApprovalTime.getMinutes() + 7); // Auto-approve after 7 minutes
+    autoApprovalTime.setMinutes(autoApprovalTime.getMinutes() + 7); // why: business rule
 
-    const result = await db.insert(applications).values({
-      ...application,
-      id: randomUUID(),
-      autoApprovalScheduledAt: autoApprovalTime,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    }).returning();
+    const result = await db
+      .insert(applications)
+      .values({
+        ...application,
+        id: randomUUID(),
+        autoApprovalScheduledAt: autoApprovalTime,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .returning();
     return result[0];
   }
 
@@ -668,11 +739,15 @@ export class DatabaseStorage implements IStorage {
     return result[0];
   }
 
-  async approveApplication(id: string, trackingLink: string, trackingCode: string): Promise<Application | undefined> {
+  async approveApplication(
+    id: string,
+    trackingLink: string,
+    trackingCode: string,
+  ): Promise<Application | undefined> {
     const result = await db
       .update(applications)
       .set({
-        status: 'approved',
+        status: "approved",
         trackingLink,
         trackingCode,
         approvedAt: new Date(),
@@ -687,7 +762,7 @@ export class DatabaseStorage implements IStorage {
     const result = await db
       .update(applications)
       .set({
-        status: 'completed',
+        status: "completed",
         completedAt: new Date(),
         updatedAt: new Date(),
       })
@@ -713,7 +788,6 @@ export class DatabaseStorage implements IStorage {
         completedAt: applications.completedAt,
         createdAt: applications.createdAt,
         updatedAt: applications.updatedAt,
-        // Include full creator data
         creatorFirstName: users.firstName,
         creatorLastName: users.lastName,
         creatorProfileImageUrl: users.profileImageUrl,
@@ -722,7 +796,6 @@ export class DatabaseStorage implements IStorage {
         creatorTiktokUrl: creatorProfiles.tiktokUrl,
         creatorInstagramUrl: creatorProfiles.instagramUrl,
         creatorNiches: creatorProfiles.niches,
-        // Analytics aggregations
         clickCount: sql<number>`COALESCE(SUM(${analytics.clicks}), 0)`,
         uniqueClickCount: sql<number>`COALESCE(SUM(${analytics.uniqueClicks}), 0)`,
         conversionCount: sql<number>`COALESCE(SUM(${analytics.conversions}), 0)`,
@@ -734,16 +807,10 @@ export class DatabaseStorage implements IStorage {
       .leftJoin(creatorProfiles, eq(users.id, creatorProfiles.userId))
       .leftJoin(analytics, eq(applications.id, analytics.applicationId))
       .where(eq(offers.companyId, companyId))
-      .groupBy(
-        applications.id,
-        offers.id,
-        users.id,
-        creatorProfiles.id
-      )
+      .groupBy(applications.id, offers.id, users.id, creatorProfiles.id)
       .orderBy(desc(applications.createdAt));
 
-    // Transform the data to include a nested creator object
-    return result.map(app => ({
+    return result.map((app) => ({
       id: app.id,
       offerId: app.offerId,
       offerTitle: app.offerTitle,
@@ -772,7 +839,7 @@ export class DatabaseStorage implements IStorage {
         tiktokUrl: app.creatorTiktokUrl,
         instagramUrl: app.creatorInstagramUrl,
         niches: app.creatorNiches,
-      }
+      },
     }));
   }
 
@@ -782,11 +849,15 @@ export class DatabaseStorage implements IStorage {
     return result[0];
   }
 
-  async getConversationsByUser(userId: string, userRole: string, companyProfileId: string | null = null): Promise<any[]> {
-    // Build the where clause based on role
-    const whereClause = userRole === 'company' && companyProfileId
-      ? eq(conversations.companyId, companyProfileId)
-      : eq(conversations.creatorId, userId);
+  async getConversationsByUser(
+    userId: string,
+    userRole: string,
+    companyProfileId: string | null = null,
+  ): Promise<any[]> {
+    const whereClause =
+      userRole === "company" && companyProfileId
+        ? eq(conversations.companyId, companyProfileId)
+        : eq(conversations.creatorId, userId);
 
     const result = await db
       .select({
@@ -800,14 +871,11 @@ export class DatabaseStorage implements IStorage {
         companyUnreadCount: conversations.companyUnreadCount,
         createdAt: conversations.createdAt,
         updatedAt: conversations.updatedAt,
-        // Offer info
         offerTitle: offers.title,
-        // Creator info
         creatorFirstName: users.firstName,
         creatorLastName: users.lastName,
         creatorEmail: users.email,
         creatorProfileImageUrl: users.profileImageUrl,
-        // Company info
         companyLegalName: companyProfiles.legalName,
         companyTradeName: companyProfiles.tradeName,
         companyLogoUrl: companyProfiles.logoUrl,
@@ -820,8 +888,7 @@ export class DatabaseStorage implements IStorage {
       .where(whereClause)
       .orderBy(desc(conversations.lastMessageAt));
 
-    // Transform to include otherUser field based on current user role
-    return result.map(conv => ({
+    return result.map((conv) => ({
       id: conv.id,
       applicationId: conv.applicationId,
       creatorId: conv.creatorId,
@@ -833,31 +900,37 @@ export class DatabaseStorage implements IStorage {
       companyUnreadCount: conv.companyUnreadCount,
       createdAt: conv.createdAt,
       updatedAt: conv.updatedAt,
-      // Set otherUser based on who is viewing
-      otherUser: userRole === 'company' ? {
-        id: conv.creatorId,
-        name: `${conv.creatorFirstName || ''} ${conv.creatorLastName || ''}`.trim() || conv.creatorEmail,
-        firstName: conv.creatorFirstName,
-        lastName: conv.creatorLastName,
-        email: conv.creatorEmail,
-        profileImageUrl: conv.creatorProfileImageUrl,
-      } : {
-        id: conv.companyUserId,
-        name: conv.companyTradeName || conv.companyLegalName,
-        legalName: conv.companyLegalName,
-        tradeName: conv.companyTradeName,
-        logoUrl: conv.companyLogoUrl,
-      }
+      otherUser:
+        userRole === "company"
+          ? {
+              id: conv.creatorId,
+              name: `${conv.creatorFirstName || ""} ${conv.creatorLastName || ""}`.trim() ||
+                conv.creatorEmail,
+              firstName: conv.creatorFirstName,
+              lastName: conv.creatorLastName,
+              email: conv.creatorEmail,
+              profileImageUrl: conv.creatorProfileImageUrl,
+            }
+          : {
+              id: conv.companyUserId,
+              name: conv.companyTradeName || conv.companyLegalName,
+              legalName: conv.companyLegalName,
+              tradeName: conv.companyTradeName,
+              logoUrl: conv.companyLogoUrl,
+            },
     }));
   }
 
   async createConversation(data: any): Promise<any> {
-    const result = await db.insert(conversations).values({
-      ...data,
-      id: randomUUID(),
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    }).returning();
+    const result = await db
+      .insert(conversations)
+      .values({
+        ...data,
+        id: randomUUID(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .returning();
     return result[0];
   }
 
@@ -865,7 +938,6 @@ export class DatabaseStorage implements IStorage {
     try {
       const result = await db.insert(messages).values(message).returning();
 
-      // Update conversation's last message timestamp
       await db
         .update(conversations)
         .set({ lastMessageAt: new Date(), updatedAt: new Date() })
@@ -873,31 +945,30 @@ export class DatabaseStorage implements IStorage {
 
       return result[0];
     } catch (error) {
-      console.error('[createMessage] Error:', error);
+      console.error("[createMessage] Error:", error);
       throw error;
     }
   }
 
   async getMessages(conversationId: string): Promise<Message[]> {
     try {
-      const result = await db.select().from(messages).where(eq(messages.conversationId, conversationId)).orderBy(messages.createdAt);
+      const result = await db
+        .select()
+        .from(messages)
+        .where(eq(messages.conversationId, conversationId))
+        .orderBy(messages.createdAt);
       return result || [];
     } catch (error) {
-      console.error('[getMessages] Error:', error);
+      console.error("[getMessages] Error:", error);
       return [];
     }
   }
 
-  async markMessagesAsRead(conversationId: string, userId: string): Promise<void> {
+  async markMessagesAsRead(conversationId: string, _userId: string): Promise<void> {
     await db
       .update(messages)
       .set({ isRead: true })
-      .where(
-        and(
-          eq(messages.conversationId, conversationId),
-          eq(messages.isRead, false)
-        )
-      );
+      .where(and(eq(messages.conversationId, conversationId), eq(messages.isRead, false)));
   }
 
   // Reviews
@@ -910,7 +981,9 @@ export class DatabaseStorage implements IStorage {
         .orderBy(desc(reviews.createdAt));
     } catch (error) {
       if (isMissingRelationError(error, "reviews")) {
-        console.warn("[Storage] reviews relation missing while fetching company reviews - returning empty array.");
+        console.warn(
+          "[Storage] reviews relation missing while fetching company reviews - returning empty array.",
+        );
         return [];
       }
       throw error;
@@ -919,16 +992,21 @@ export class DatabaseStorage implements IStorage {
 
   async createReview(review: InsertReview): Promise<Review> {
     try {
-      const result = await db.insert(reviews).values({
-        ...review,
-        id: randomUUID(),
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      }).returning();
+      const result = await db
+        .insert(reviews)
+        .values({
+          ...review,
+          id: randomUUID(),
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .returning();
       return result[0];
     } catch (error) {
       if (isMissingRelationError(error, "reviews")) {
-        console.warn("[Storage] reviews relation missing while creating review - returning ephemeral review.");
+        console.warn(
+          "[Storage] reviews relation missing while creating review - returning ephemeral review.",
+        );
         return buildEphemeralReview(review);
       }
       throw error;
@@ -957,7 +1035,9 @@ export class DatabaseStorage implements IStorage {
       return await db.select().from(reviews).orderBy(desc(reviews.createdAt));
     } catch (error) {
       if (isMissingRelationError(error, "reviews")) {
-        console.warn("[Storage] reviews relation missing while fetching all reviews - returning empty array.");
+        console.warn(
+          "[Storage] reviews relation missing while fetching all reviews - returning empty array.",
+        );
         return [];
       }
       throw error;
@@ -993,20 +1073,22 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  async updateAdminNote(id: string, note: string, adminId: string): Promise<Review | undefined> {
+  async updateAdminNote(id: string, note: string, _adminId: string): Promise<Review | undefined> {
     try {
       const result = await db
         .update(reviews)
         .set({
           adminNote: note,
-          updatedAt: new Date()
+          updatedAt: new Date(),
         })
         .where(eq(reviews.id, id))
         .returning();
       return result[0];
     } catch (error) {
       if (isMissingRelationError(error, "reviews")) {
-        console.warn("[Storage] reviews relation missing while updating admin note - treating as no-op.");
+        console.warn(
+          "[Storage] reviews relation missing while updating admin note - treating as no-op.",
+        );
         return undefined;
       }
       throw error;
@@ -1022,14 +1104,16 @@ export class DatabaseStorage implements IStorage {
           isHidden: false,
           approvedBy: adminId,
           approvedAt: new Date(),
-          updatedAt: new Date()
+          updatedAt: new Date(),
         })
         .where(eq(reviews.id, id))
         .returning();
       return result[0];
     } catch (error) {
       if (isMissingRelationError(error, "reviews")) {
-        console.warn("[Storage] reviews relation missing while approving review - treating as no-op.");
+        console.warn(
+          "[Storage] reviews relation missing while approving review - treating as no-op.",
+        );
         return undefined;
       }
       throw error;
@@ -1042,7 +1126,7 @@ export class DatabaseStorage implements IStorage {
       const result = await db.select().from(favorites).where(eq(favorites.creatorId, creatorId));
       return result || [];
     } catch (error) {
-      console.error('[getFavoritesByCreator] Error:', error);
+      console.error("[getFavoritesByCreator] Error:", error);
       return [];
     }
   }
@@ -1057,16 +1141,21 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createFavorite(favorite: InsertFavorite): Promise<Favorite> {
-    const result = await db.insert(favorites).values({
-      ...favorite,
-      id: randomUUID(),
-      createdAt: new Date(),
-    }).returning();
+    const result = await db
+      .insert(favorites)
+      .values({
+        ...favorite,
+        id: randomUUID(),
+        createdAt: new Date(),
+      })
+      .returning();
     return result[0];
   }
 
   async deleteFavorite(creatorId: string, offerId: string): Promise<void> {
-    await db.delete(favorites).where(and(eq(favorites.creatorId, creatorId), eq(favorites.offerId, offerId)));
+    await db
+      .delete(favorites)
+      .where(and(eq(favorites.creatorId, creatorId), eq(favorites.offerId, offerId)));
   }
 
   // Analytics
@@ -1083,14 +1172,16 @@ export class DatabaseStorage implements IStorage {
         .innerJoin(applications, eq(analytics.applicationId, applications.id))
         .where(eq(applications.creatorId, creatorId));
 
-      return result[0] || {
-        totalEarnings: 0,
-        totalClicks: 0,
-        uniqueClicks: 0,
-        conversions: 0,
-      };
+      return (
+        result[0] || {
+          totalEarnings: 0,
+          totalClicks: 0,
+          uniqueClicks: 0,
+          conversions: 0,
+        }
+      );
     } catch (error) {
-      console.error('[getAnalyticsByCreator] Error:', error);
+      console.error("[getAnalyticsByCreator] Error:", error);
       return {
         totalEarnings: 0,
         totalClicks: 0,
@@ -1102,14 +1193,13 @@ export class DatabaseStorage implements IStorage {
 
   async getAnalyticsTimeSeriesByCreator(creatorId: string, dateRange: string): Promise<any[]> {
     try {
-      // Calculate date filter based on range
-      let whereClauses: any[] = [eq(applications.creatorId, creatorId)];
+      const whereClauses: any[] = [eq(applications.creatorId, creatorId)];
 
-      if (dateRange !== 'all') {
+      if (dateRange !== "all") {
         let daysBack = 30;
-        if (dateRange === '7d') daysBack = 7;
-        else if (dateRange === '30d') daysBack = 30;
-        else if (dateRange === '90d') daysBack = 90;
+        if (dateRange === "7d") daysBack = 7;
+        else if (dateRange === "30d") daysBack = 30;
+        else if (dateRange === "90d") daysBack = 90;
 
         const startDate = new Date();
         startDate.setDate(startDate.getDate() - daysBack);
@@ -1129,43 +1219,55 @@ export class DatabaseStorage implements IStorage {
 
       return result || [];
     } catch (error) {
-      console.error('[getAnalyticsTimeSeriesByCreator] Error:', error);
+      console.error("[getAnalyticsTimeSeriesByCreator] Error:", error);
       return [];
     }
   }
 
   async getAnalyticsByApplication(applicationId: string): Promise<any[]> {
-    return await db.select().from(analytics).where(eq(analytics.applicationId, applicationId)).orderBy(desc(analytics.date));
+    return await db
+      .select()
+      .from(analytics)
+      .where(eq(analytics.applicationId, applicationId))
+      .orderBy(desc(analytics.date));
   }
 
-  async logTrackingClick(applicationId: string, clickData: { ip: string; userAgent: string; referer: string; timestamp: Date }): Promise<void> {
-    // Get application to find offerId and creatorId
+  async logTrackingClick(
+    applicationId: string,
+    clickData: { ip: string; userAgent: string; referer: string; timestamp: Date },
+  ): Promise<void> {
     const application = await this.getApplication(applicationId);
     if (!application) {
-      console.error('[Tracking] Application not found:', applicationId);
+      console.error("[Tracking] Application not found:", applicationId);
       return;
     }
 
-    // Parse user agent for device type and browser (basic detection)
-    const deviceType = clickData.userAgent.toLowerCase().includes('mobile') ? 'mobile' : 
-                       clickData.userAgent.toLowerCase().includes('tablet') ? 'tablet' : 'desktop';
-    const browser = clickData.userAgent.includes('Chrome') ? 'Chrome' :
-                    clickData.userAgent.includes('Firefox') ? 'Firefox' :
-                    clickData.userAgent.includes('Safari') ? 'Safari' : 'Other';
+    const ua = clickData.userAgent || "";
+    const uaLower = ua.toLowerCase();
+    const deviceType = uaLower.includes("mobile")
+      ? "mobile"
+      : uaLower.includes("tablet")
+      ? "tablet"
+      : "desktop";
+    const browser = ua.includes("Chrome")
+      ? "Chrome"
+      : ua.includes("Firefox")
+      ? "Firefox"
+      : ua.includes("Safari")
+      ? "Safari"
+      : "Other";
 
-    // Geo-IP lookup
     const geo = geoip.lookup(clickData.ip);
-    const country = geo?.country || 'Unknown';
-    const city = geo?.city || 'Unknown';
+    const country = geo?.country || "Unknown";
+    const city = geo?.city || "Unknown";
 
-    // Store individual click event with full metadata
     await db.insert(clickEvents).values({
       id: randomUUID(),
       applicationId,
       offerId: application.offerId,
       creatorId: application.creatorId,
       ipAddress: clickData.ip,
-      userAgent: clickData.userAgent,
+      userAgent: ua,
       referer: clickData.referer,
       country,
       city,
@@ -1175,27 +1277,19 @@ export class DatabaseStorage implements IStorage {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    // Count unique IPs for today
     const uniqueIpsToday = await db
+      // @ts-expect-error drizzle has selectDistinct in some dialects; adjust if needed
       .selectDistinct({ ipAddress: clickEvents.ipAddress })
       .from(clickEvents)
-      .where(and(
-        eq(clickEvents.applicationId, applicationId),
-        sql`${clickEvents.timestamp}::date = ${today}::date`
-      ));
+      .where(and(eq(clickEvents.applicationId, applicationId), sql`${clickEvents.timestamp}::date = ${today}::date`));
 
-    // Check if analytics record exists for today
     const existing = await db
       .select()
       .from(analytics)
-      .where(and(
-        eq(analytics.applicationId, applicationId),
-        eq(analytics.date, today)
-      ))
+      .where(and(eq(analytics.applicationId, applicationId), eq(analytics.date, today)))
       .limit(1);
 
     if (existing.length > 0) {
-      // Update existing record - increment clicks and update unique count
       await db
         .update(analytics)
         .set({
@@ -1204,7 +1298,6 @@ export class DatabaseStorage implements IStorage {
         })
         .where(eq(analytics.id, existing[0].id));
     } else {
-      // Create new record
       await db.insert(analytics).values({
         id: randomUUID(),
         applicationId,
@@ -1214,58 +1307,56 @@ export class DatabaseStorage implements IStorage {
         clicks: 1,
         uniqueClicks: uniqueIpsToday.length,
         conversions: 0,
-        earnings: '0',
+        earnings: "0",
         createdAt: new Date(),
         updatedAt: new Date(),
       });
     }
 
-    console.log(`[Tracking] Logged click for application ${applicationId} from ${city}, ${country} - IP: ${clickData.ip}`);
+    console.log(
+      `[Tracking] Logged click for application ${applicationId} from ${city}, ${country} - IP: ${clickData.ip}`,
+    );
   }
 
   // Record Conversion and Calculate Earnings
   async recordConversion(applicationId: string, saleAmount?: number): Promise<void> {
-    // Get application and offer details
     const application = await this.getApplication(applicationId);
     if (!application) {
-      console.error('[Conversion] Application not found:', applicationId);
+      console.error("[Conversion] Application not found:", applicationId);
       return;
     }
 
     const offer = await this.getOffer(application.offerId);
     if (!offer) {
-      console.error('[Conversion] Offer not found:', application.offerId);
+      console.error("[Conversion] Offer not found:", application.offerId);
       return;
     }
 
-    // Calculate earnings based on commission type
     let earnings = 0;
 
     switch (offer.commissionType) {
-      case 'per_sale':
+      case "per_sale":
         if (!saleAmount || !offer.commissionPercentage) {
-          console.error('[Conversion] Sale amount required for per_sale commission');
+          console.error("[Conversion] Sale amount required for per_sale commission");
           return;
         }
         earnings = (saleAmount * parseFloat(offer.commissionPercentage.toString())) / 100;
         break;
 
-      case 'per_lead':
-      case 'per_click':
+      case "per_lead":
+      case "per_click":
         if (!offer.commissionAmount) {
-          console.error('[Conversion] Commission amount not set');
+          console.error("[Conversion] Commission amount not set");
           return;
         }
         earnings = parseFloat(offer.commissionAmount.toString());
         break;
 
-      case 'monthly_retainer':
-        // Retainer payments are handled separately via deliverable approval
-        console.log('[Conversion] Retainer payments handled via deliverable approval');
+      case "monthly_retainer":
+        console.log("[Conversion] Retainer payments handled via deliverable approval");
         return;
 
-      case 'hybrid':
-        // For hybrid, use commission amount if set, otherwise percentage
+      case "hybrid":
         if (offer.commissionAmount) {
           earnings = parseFloat(offer.commissionAmount.toString());
         } else if (saleAmount && offer.commissionPercentage) {
@@ -1277,18 +1368,13 @@ export class DatabaseStorage implements IStorage {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    // Check if analytics record exists for today
     const existing = await db
       .select()
       .from(analytics)
-      .where(and(
-        eq(analytics.applicationId, applicationId),
-        eq(analytics.date, today)
-      ))
+      .where(and(eq(analytics.applicationId, applicationId), eq(analytics.date, today)))
       .limit(1);
 
     if (existing.length > 0) {
-      // Update existing record - increment conversions and add earnings
       await db
         .update(analytics)
         .set({
@@ -1297,7 +1383,6 @@ export class DatabaseStorage implements IStorage {
         })
         .where(eq(analytics.id, existing[0].id));
     } else {
-      // Create new record
       await db.insert(analytics).values({
         id: randomUUID(),
         applicationId,
@@ -1313,35 +1398,45 @@ export class DatabaseStorage implements IStorage {
       });
     }
 
-    // Create payment record for creator
     await this.createPayment({
       applicationId: applicationId,
       creatorId: application.creatorId,
       companyId: offer.companyId,
       offerId: application.offerId,
       grossAmount: earnings.toFixed(2),
-      platformFeeAmount: '0',
-      stripeFeeAmount: '0',
+      platformFeeAmount: "0",
+      stripeFeeAmount: "0",
       netAmount: earnings.toFixed(2),
-      status: 'pending',
+      status: "pending",
       description: `Commission for ${offer.commissionType} conversion`,
     });
 
-    console.log(`[Conversion] Recorded conversion for application ${applicationId} - Earnings: $${earnings.toFixed(2)}`);
+    console.log(
+      `[Conversion] Recorded conversion for application ${applicationId} - Earnings: $${earnings.toFixed(
+        2,
+      )}`,
+    );
   }
 
   // Payment Settings
   async getPaymentSettings(userId: string): Promise<PaymentSetting[]> {
-    return await db.select().from(paymentSettings).where(eq(paymentSettings.userId, userId)).orderBy(desc(paymentSettings.createdAt));
+    return await db
+      .select()
+      .from(paymentSettings)
+      .where(eq(paymentSettings.userId, userId))
+      .orderBy(desc(paymentSettings.createdAt));
   }
 
   async createPaymentSetting(setting: InsertPaymentSetting): Promise<PaymentSetting> {
-    const result = await db.insert(paymentSettings).values({
-      ...setting,
-      id: randomUUID(),
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    }).returning();
+    const result = await db
+      .insert(paymentSettings)
+      .values({
+        ...setting,
+        id: randomUUID(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .returning();
     return result[0];
   }
 
@@ -1351,12 +1446,15 @@ export class DatabaseStorage implements IStorage {
 
   // Payments
   async createPayment(payment: InsertPayment): Promise<Payment> {
-    const result = await db.insert(payments).values({
-      ...payment,
-      id: randomUUID(),
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    }).returning();
+    const result = await db
+      .insert(payments)
+      .values({
+        ...payment,
+        id: randomUUID(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .returning();
     return result[0];
   }
 
@@ -1382,14 +1480,14 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getAllPayments(): Promise<any[]> {
-    // Simplified query - join details can be added later if needed
-    return await db
-      .select()
-      .from(payments)
-      .orderBy(desc(payments.createdAt));
+    return await db.select().from(payments).orderBy(desc(payments.createdAt));
   }
 
-  async updatePaymentStatus(id: string, status: string, updates?: Partial<InsertPayment>): Promise<Payment | undefined> {
+  async updatePaymentStatus(
+    id: string,
+    status: string,
+    updates?: Partial<InsertPayment>,
+  ): Promise<Payment | undefined> {
     const result = await db
       .update(payments)
       .set({
@@ -1411,9 +1509,9 @@ export class DatabaseStorage implements IStorage {
       .leftJoin(users, eq(companyProfiles.userId, users.id))
       .where(eq(retainerContracts.id, id))
       .limit(1);
-    
+
     if (result.length === 0) return undefined;
-    
+
     return {
       ...result[0].retainer_contracts,
       company: result[0].company_profiles,
@@ -1427,13 +1525,13 @@ export class DatabaseStorage implements IStorage {
       .from(retainerContracts)
       .leftJoin(companyProfiles, eq(retainerContracts.companyId, companyProfiles.id))
       .leftJoin(users, eq(companyProfiles.userId, users.id));
-    
+
     if (filters?.status) {
-      query = query.where(eq(retainerContracts.status, filters.status)) as any;
+      query = (query.where(eq(retainerContracts.status, filters.status)) as unknown) as typeof query;
     }
-    
+
     const results = await query.orderBy(desc(retainerContracts.createdAt));
-    
+
     return results.map((r: any) => ({
       ...r.retainer_contracts,
       company: r.company_profiles,
@@ -1447,7 +1545,7 @@ export class DatabaseStorage implements IStorage {
       .from(retainerContracts)
       .where(eq(retainerContracts.companyId, companyId))
       .orderBy(desc(retainerContracts.createdAt));
-    
+
     return results;
   }
 
@@ -1458,7 +1556,7 @@ export class DatabaseStorage implements IStorage {
       .leftJoin(companyProfiles, eq(retainerContracts.companyId, companyProfiles.id))
       .where(eq(retainerContracts.assignedCreatorId, creatorId))
       .orderBy(desc(retainerContracts.createdAt));
-    
+
     return results.map((r: any) => ({
       ...r.retainer_contracts,
       company: r.company_profiles,
@@ -1471,9 +1569,9 @@ export class DatabaseStorage implements IStorage {
       .from(retainerContracts)
       .leftJoin(companyProfiles, eq(retainerContracts.companyId, companyProfiles.id))
       .leftJoin(users, eq(companyProfiles.userId, users.id))
-      .where(eq(retainerContracts.status, 'open'))
+      .where(eq(retainerContracts.status, "open"))
       .orderBy(desc(retainerContracts.createdAt));
-    
+
     return results.map((r: any) => ({
       ...r.retainer_contracts,
       company: r.company_profiles,
@@ -1482,16 +1580,22 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createRetainerContract(contract: InsertRetainerContract): Promise<RetainerContract> {
-    const result = await db.insert(retainerContracts).values({
-      ...contract,
-      id: randomUUID(),
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    }).returning();
+    const result = await db
+      .insert(retainerContracts)
+      .values({
+        ...contract,
+        id: randomUUID(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .returning();
     return result[0];
   }
 
-  async updateRetainerContract(id: string, updates: Partial<InsertRetainerContract>): Promise<RetainerContract | undefined> {
+  async updateRetainerContract(
+    id: string,
+    updates: Partial<InsertRetainerContract>,
+  ): Promise<RetainerContract | undefined> {
     const result = await db
       .update(retainerContracts)
       .set({ ...updates, updatedAt: new Date() })
@@ -1514,9 +1618,9 @@ export class DatabaseStorage implements IStorage {
       .leftJoin(retainerContracts, eq(retainerApplications.contractId, retainerContracts.id))
       .where(eq(retainerApplications.id, id))
       .limit(1);
-    
+
     if (result.length === 0) return undefined;
-    
+
     return {
       ...result[0].retainer_applications,
       creator: result[0].users,
@@ -1533,7 +1637,7 @@ export class DatabaseStorage implements IStorage {
       .leftJoin(creatorProfiles, eq(users.id, creatorProfiles.userId))
       .where(eq(retainerApplications.contractId, contractId))
       .orderBy(desc(retainerApplications.createdAt));
-    
+
     return results.map((r: any) => ({
       ...r.retainer_applications,
       creator: r.users,
@@ -1549,7 +1653,7 @@ export class DatabaseStorage implements IStorage {
       .leftJoin(companyProfiles, eq(retainerContracts.companyId, companyProfiles.id))
       .where(eq(retainerApplications.creatorId, creatorId))
       .orderBy(desc(retainerApplications.createdAt));
-    
+
     return results.map((r: any) => ({
       ...r.retainer_applications,
       contract: r.retainer_contracts,
@@ -1558,16 +1662,22 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createRetainerApplication(application: InsertRetainerApplication): Promise<RetainerApplication> {
-    const result = await db.insert(retainerApplications).values({
-      ...application,
-      id: randomUUID(),
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    }).returning();
+    const result = await db
+      .insert(retainerApplications)
+      .values({
+        ...application,
+        id: randomUUID(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .returning();
     return result[0];
   }
 
-  async updateRetainerApplication(id: string, updates: Partial<InsertRetainerApplication>): Promise<RetainerApplication | undefined> {
+  async updateRetainerApplication(
+    id: string,
+    updates: Partial<InsertRetainerApplication>,
+  ): Promise<RetainerApplication | undefined> {
     const result = await db
       .update(retainerApplications)
       .set({ ...updates, updatedAt: new Date() })
@@ -1576,32 +1686,34 @@ export class DatabaseStorage implements IStorage {
     return result[0];
   }
 
-  async approveRetainerApplication(id: string, contractId: string, creatorId: string): Promise<RetainerApplication | undefined> {
-    // Update application status to approved
+  async approveRetainerApplication(
+    id: string,
+    contractId: string,
+    creatorId: string,
+  ): Promise<RetainerApplication | undefined> {
     const appResult = await db
       .update(retainerApplications)
-      .set({ status: 'approved', updatedAt: new Date() })
+      .set({ status: "approved", updatedAt: new Date() })
       .where(eq(retainerApplications.id, id))
       .returning();
-    
-    // Update contract to assign creator and change status to in_progress
+
     await db
       .update(retainerContracts)
       .set({
         assignedCreatorId: creatorId,
-        status: 'in_progress',
+        status: "in_progress",
         startDate: new Date(),
         updatedAt: new Date(),
       })
       .where(eq(retainerContracts.id, contractId));
-    
+
     return appResult[0];
   }
 
   async rejectRetainerApplication(id: string): Promise<RetainerApplication | undefined> {
     const result = await db
       .update(retainerApplications)
-      .set({ status: 'rejected', updatedAt: new Date() })
+      .set({ status: "rejected", updatedAt: new Date() })
       .where(eq(retainerApplications.id, id))
       .returning();
     return result[0];
@@ -1633,7 +1745,7 @@ export class DatabaseStorage implements IStorage {
       .leftJoin(retainerContracts, eq(retainerDeliverables.contractId, retainerContracts.id))
       .where(eq(retainerDeliverables.creatorId, creatorId))
       .orderBy(desc(retainerDeliverables.submittedAt));
-    
+
     return results.map((r: any) => ({
       ...r.retainer_deliverables,
       contract: r.retainer_contracts,
@@ -1644,26 +1756,27 @@ export class DatabaseStorage implements IStorage {
     const results = await db
       .select()
       .from(retainerDeliverables)
-      .where(
-        and(
-          eq(retainerDeliverables.contractId, contractId),
-          eq(retainerDeliverables.monthNumber, monthNumber)
-        )
-      )
+      .where(and(eq(retainerDeliverables.contractId, contractId), eq(retainerDeliverables.monthNumber, monthNumber)))
       .orderBy(retainerDeliverables.videoNumber);
     return results;
   }
 
   async createRetainerDeliverable(deliverable: InsertRetainerDeliverable): Promise<RetainerDeliverable> {
-    const result = await db.insert(retainerDeliverables).values({
-      ...deliverable,
-      id: randomUUID(),
-      createdAt: new Date(),
-    }).returning();
+    const result = await db
+      .insert(retainerDeliverables)
+      .values({
+        ...deliverable,
+        id: randomUUID(),
+        createdAt: new Date(),
+      })
+      .returning();
     return result[0];
   }
 
-  async updateRetainerDeliverable(id: string, updates: Partial<InsertRetainerDeliverable>): Promise<RetainerDeliverable | undefined> {
+  async updateRetainerDeliverable(
+    id: string,
+    updates: Partial<InsertRetainerDeliverable>,
+  ): Promise<RetainerDeliverable | undefined> {
     const result = await db
       .update(retainerDeliverables)
       .set(updates)
@@ -1676,7 +1789,7 @@ export class DatabaseStorage implements IStorage {
     const result = await db
       .update(retainerDeliverables)
       .set({
-        status: 'approved',
+        status: "approved",
         reviewedAt: new Date(),
         reviewNotes,
       })
@@ -1689,7 +1802,7 @@ export class DatabaseStorage implements IStorage {
     const result = await db
       .update(retainerDeliverables)
       .set({
-        status: 'rejected',
+        status: "rejected",
         reviewedAt: new Date(),
         reviewNotes,
       })
@@ -1702,7 +1815,7 @@ export class DatabaseStorage implements IStorage {
     const result = await db
       .update(retainerDeliverables)
       .set({
-        status: 'revision_requested',
+        status: "revision_requested",
         reviewedAt: new Date(),
         reviewNotes,
       })
@@ -1714,15 +1827,20 @@ export class DatabaseStorage implements IStorage {
   // Notifications
   async createNotification(notification: InsertNotification): Promise<Notification> {
     try {
-      const result = await db.insert(notifications).values({
-        ...notification,
-        id: randomUUID(),
-        createdAt: new Date(),
-      }).returning();
+      const result = await db
+        .insert(notifications)
+        .values({
+          ...notification,
+          id: randomUUID(),
+          createdAt: new Date(),
+        })
+        .returning();
       return result[0];
     } catch (error) {
       if (isMissingNotificationSchema(error)) {
-        console.warn("[Storage] notifications relation missing while creating notification - returning ephemeral notification.");
+        console.warn(
+          "[Storage] notifications relation missing while creating notification - returning ephemeral notification.",
+        );
         return buildEphemeralNotification(notification);
       }
       throw error;
@@ -1740,7 +1858,9 @@ export class DatabaseStorage implements IStorage {
       return results;
     } catch (error) {
       if (isMissingNotificationSchema(error)) {
-        console.warn("[Storage] notifications relation missing while fetching notifications - returning empty array.");
+        console.warn(
+          "[Storage] notifications relation missing while fetching notifications - returning empty array.",
+        );
         return [];
       }
       throw error;
@@ -1757,7 +1877,9 @@ export class DatabaseStorage implements IStorage {
       return results;
     } catch (error) {
       if (isMissingNotificationSchema(error)) {
-        console.warn("[Storage] notifications relation missing while fetching unread notifications - returning empty array.");
+        console.warn(
+          "[Storage] notifications relation missing while fetching unread notifications - returning empty array.",
+        );
         return [];
       }
       throw error;
@@ -1773,7 +1895,9 @@ export class DatabaseStorage implements IStorage {
       return coerceCount(result[0]?.count ?? 0);
     } catch (error) {
       if (isMissingNotificationSchema(error)) {
-        console.warn("[Storage] notifications relation missing while counting unread notifications - returning 0.");
+        console.warn(
+          "[Storage] notifications relation missing while counting unread notifications - returning 0.",
+        );
         return 0;
       }
       throw error;
@@ -1790,7 +1914,9 @@ export class DatabaseStorage implements IStorage {
       return result[0];
     } catch (error) {
       if (isMissingNotificationSchema(error)) {
-        console.warn("[Storage] notifications relation missing while marking notification as read - treating as already handled.");
+        console.warn(
+          "[Storage] notifications relation missing while marking notification as read - treating as already handled.",
+        );
         return undefined;
       }
       throw error;
@@ -1805,7 +1931,9 @@ export class DatabaseStorage implements IStorage {
         .where(and(eq(notifications.userId, userId), eq(notifications.isRead, false)));
     } catch (error) {
       if (isMissingNotificationSchema(error)) {
-        console.warn("[Storage] notifications relation missing while marking all notifications as read - skipping operation.");
+        console.warn(
+          "[Storage] notifications relation missing while marking all notifications as read - skipping operation.",
+        );
         return;
       }
       throw error;
@@ -1817,7 +1945,9 @@ export class DatabaseStorage implements IStorage {
       await db.delete(notifications).where(eq(notifications.id, id));
     } catch (error) {
       if (isMissingNotificationSchema(error)) {
-        console.warn("[Storage] notifications relation missing while deleting notification - skipping operation.");
+        console.warn(
+          "[Storage] notifications relation missing while deleting notification - skipping operation.",
+        );
         return;
       }
       throw error;
@@ -1829,7 +1959,9 @@ export class DatabaseStorage implements IStorage {
       await db.delete(notifications).where(eq(notifications.userId, userId));
     } catch (error) {
       if (isMissingNotificationSchema(error)) {
-        console.warn("[Storage] notifications relation missing while clearing notifications - skipping operation.");
+        console.warn(
+          "[Storage] notifications relation missing while clearing notifications - skipping operation.",
+        );
         return;
       }
       throw error;
@@ -1847,25 +1979,34 @@ export class DatabaseStorage implements IStorage {
       return result[0] || null;
     } catch (error) {
       if (isMissingRelationError(error, "user_notification_preferences")) {
-        console.warn("[Storage] user_notification_preferences relation missing while fetching preferences - returning null.");
+        console.warn(
+          "[Storage] user_notification_preferences relation missing while fetching preferences - returning null.",
+        );
         return null;
       }
       throw error;
     }
   }
 
-  async createUserNotificationPreferences(preferences: InsertUserNotificationPreferences): Promise<UserNotificationPreferences> {
+  async createUserNotificationPreferences(
+    preferences: InsertUserNotificationPreferences,
+  ): Promise<UserNotificationPreferences> {
     try {
-      const result = await db.insert(userNotificationPreferences).values({
-        ...preferences,
-        id: randomUUID(),
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      }).returning();
+      const result = await db
+        .insert(userNotificationPreferences)
+        .values({
+          ...preferences,
+          id: randomUUID(),
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .returning();
       return result[0];
     } catch (error) {
       if (isMissingRelationError(error, "user_notification_preferences")) {
-        console.warn("[Storage] user_notification_preferences relation missing while creating preferences - returning defaults.");
+        console.warn(
+          "[Storage] user_notification_preferences relation missing while creating preferences - returning defaults.",
+        );
         return {
           ...buildDefaultNotificationPreferences(preferences.userId),
           ...preferences,
@@ -1875,7 +2016,10 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  async updateUserNotificationPreferences(userId: string, updates: Partial<InsertUserNotificationPreferences>): Promise<UserNotificationPreferences | undefined> {
+  async updateUserNotificationPreferences(
+    userId: string,
+    updates: Partial<InsertUserNotificationPreferences>,
+  ): Promise<UserNotificationPreferences | undefined> {
     try {
       const result = await db
         .update(userNotificationPreferences)
@@ -1885,7 +2029,9 @@ export class DatabaseStorage implements IStorage {
       return result[0];
     } catch (error) {
       if (isMissingRelationError(error, "user_notification_preferences")) {
-        console.warn("[Storage] user_notification_preferences relation missing while updating preferences - returning merged defaults.");
+        console.warn(
+          "[Storage] user_notification_preferences relation missing while updating preferences - returning merged defaults.",
+        );
         return {
           ...buildDefaultNotificationPreferences(userId),
           ...updates,
@@ -1897,6 +2043,7 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
+  // Admin
   private async updateCreatorAccountStatus(
     userId: string,
     status: User["accountStatus"],
@@ -1957,13 +2104,8 @@ export class DatabaseStorage implements IStorage {
           : null,
       }));
     } catch (error) {
-      if (
-        isMissingRelationError(error, "users") ||
-        isMissingRelationError(error, "creator_profiles")
-      ) {
-        console.warn(
-          "[Storage] creator listing relations missing - returning empty creator list.",
-        );
+      if (isMissingRelationError(error, "users") || isMissingRelationError(error, "creator_profiles")) {
+        console.warn("[Storage] creator listing relations missing - returning empty creator list.");
         return [];
       }
       throw error;
