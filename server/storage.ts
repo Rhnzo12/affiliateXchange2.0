@@ -57,6 +57,41 @@ import {
   type UserNotificationPreferences,
   type InsertUserNotificationPreferences,
 } from "@shared/schema";
+
+function isMissingRelationError(error: unknown, relation: string): boolean {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+
+  const { code, message } = error as { code?: string; message?: unknown };
+
+  if (typeof code === "string" && code === "42P01") {
+    return true;
+  }
+
+  if (typeof message === "string" && message.includes(`relation "${relation}" does not exist`)) {
+    return true;
+  }
+
+  return false;
+}
+
+function coerceCount(value: unknown): number {
+  if (typeof value === "number") {
+    return value;
+  }
+
+  if (typeof value === "bigint") {
+    return Number(value);
+  }
+
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    return Number.isNaN(parsed) ? 0 : parsed;
+  }
+
+  return 0;
+}
 export interface IStorage {
   // Users
   getUser(id: string): Promise<User | undefined>;
@@ -755,7 +790,15 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getAllReviews(): Promise<Review[]> {
-    return await db.select().from(reviews).orderBy(desc(reviews.createdAt));
+    try {
+      return await db.select().from(reviews).orderBy(desc(reviews.createdAt));
+    } catch (error) {
+      if (isMissingRelationError(error, "reviews")) {
+        console.warn("[Storage] reviews relation missing while fetching all reviews - returning empty array.");
+        return [];
+      }
+      throw error;
+    }
   }
 
   async hideReview(id: string): Promise<Review | undefined> {
@@ -1484,64 +1527,128 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getNotifications(userId: string, limit: number = 50): Promise<Notification[]> {
-    const results = await db
-      .select()
-      .from(notifications)
-      .where(eq(notifications.userId, userId))
-      .orderBy(desc(notifications.createdAt))
-      .limit(limit);
-    return results;
+    try {
+      const results = await db
+        .select()
+        .from(notifications)
+        .where(eq(notifications.userId, userId))
+        .orderBy(desc(notifications.createdAt))
+        .limit(limit);
+      return results;
+    } catch (error) {
+      if (isMissingRelationError(error, "notifications")) {
+        console.warn("[Storage] notifications relation missing while fetching notifications - returning empty array.");
+        return [];
+      }
+      throw error;
+    }
   }
 
   async getUnreadNotifications(userId: string): Promise<Notification[]> {
-    const results = await db
-      .select()
-      .from(notifications)
-      .where(and(eq(notifications.userId, userId), eq(notifications.isRead, false)))
-      .orderBy(desc(notifications.createdAt));
-    return results;
+    try {
+      const results = await db
+        .select()
+        .from(notifications)
+        .where(and(eq(notifications.userId, userId), eq(notifications.isRead, false)))
+        .orderBy(desc(notifications.createdAt));
+      return results;
+    } catch (error) {
+      if (isMissingRelationError(error, "notifications")) {
+        console.warn("[Storage] notifications relation missing while fetching unread notifications - returning empty array.");
+        return [];
+      }
+      throw error;
+    }
   }
 
   async getUnreadNotificationCount(userId: string): Promise<number> {
-    const result = await db
-      .select({ count: count() })
-      .from(notifications)
-      .where(and(eq(notifications.userId, userId), eq(notifications.isRead, false)));
-    return result[0]?.count || 0;
+    try {
+      const result = await db
+        .select({ count: count() })
+        .from(notifications)
+        .where(and(eq(notifications.userId, userId), eq(notifications.isRead, false)));
+      return coerceCount(result[0]?.count ?? 0);
+    } catch (error) {
+      if (isMissingRelationError(error, "notifications")) {
+        console.warn("[Storage] notifications relation missing while counting unread notifications - returning 0.");
+        return 0;
+      }
+      throw error;
+    }
   }
 
   async markNotificationAsRead(id: string): Promise<Notification | undefined> {
-    const result = await db
-      .update(notifications)
-      .set({ isRead: true, readAt: new Date() })
-      .where(eq(notifications.id, id))
-      .returning();
-    return result[0];
+    try {
+      const result = await db
+        .update(notifications)
+        .set({ isRead: true, readAt: new Date() })
+        .where(eq(notifications.id, id))
+        .returning();
+      return result[0];
+    } catch (error) {
+      if (isMissingRelationError(error, "notifications")) {
+        console.warn("[Storage] notifications relation missing while marking notification as read - treating as already handled.");
+        return undefined;
+      }
+      throw error;
+    }
   }
 
   async markAllNotificationsAsRead(userId: string): Promise<void> {
-    await db
-      .update(notifications)
-      .set({ isRead: true, readAt: new Date() })
-      .where(and(eq(notifications.userId, userId), eq(notifications.isRead, false)));
+    try {
+      await db
+        .update(notifications)
+        .set({ isRead: true, readAt: new Date() })
+        .where(and(eq(notifications.userId, userId), eq(notifications.isRead, false)));
+    } catch (error) {
+      if (isMissingRelationError(error, "notifications")) {
+        console.warn("[Storage] notifications relation missing while marking all notifications as read - skipping operation.");
+        return;
+      }
+      throw error;
+    }
   }
 
   async deleteNotification(id: string): Promise<void> {
-    await db.delete(notifications).where(eq(notifications.id, id));
+    try {
+      await db.delete(notifications).where(eq(notifications.id, id));
+    } catch (error) {
+      if (isMissingRelationError(error, "notifications")) {
+        console.warn("[Storage] notifications relation missing while deleting notification - skipping operation.");
+        return;
+      }
+      throw error;
+    }
   }
 
   async clearAllNotifications(userId: string): Promise<void> {
-    await db.delete(notifications).where(eq(notifications.userId, userId));
+    try {
+      await db.delete(notifications).where(eq(notifications.userId, userId));
+    } catch (error) {
+      if (isMissingRelationError(error, "notifications")) {
+        console.warn("[Storage] notifications relation missing while clearing notifications - skipping operation.");
+        return;
+      }
+      throw error;
+    }
   }
 
   // User Notification Preferences
   async getUserNotificationPreferences(userId: string): Promise<UserNotificationPreferences | null> {
-    const result = await db
-      .select()
-      .from(userNotificationPreferences)
-      .where(eq(userNotificationPreferences.userId, userId))
-      .limit(1);
-    return result[0] || null;
+    try {
+      const result = await db
+        .select()
+        .from(userNotificationPreferences)
+        .where(eq(userNotificationPreferences.userId, userId))
+        .limit(1);
+      return result[0] || null;
+    } catch (error) {
+      if (isMissingRelationError(error, "user_notification_preferences")) {
+        console.warn("[Storage] user_notification_preferences relation missing while fetching preferences - returning null.");
+        return null;
+      }
+      throw error;
+    }
   }
 
   async createUserNotificationPreferences(preferences: InsertUserNotificationPreferences): Promise<UserNotificationPreferences> {
