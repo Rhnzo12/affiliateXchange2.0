@@ -19,6 +19,7 @@ gcs-*.json
 database-export-*.json
 database-dump.sql
 *.sql
+!db/migrations/*.sql
 
 # OS files
 .DS_Store
