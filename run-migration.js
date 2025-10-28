@@ -1,5 +1,5 @@
 import { neon } from '@neondatabase/serverless';
-import { readFileSync } from 'fs';
+import { readFileSync, readdirSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
@@ -14,46 +14,65 @@ async function runMigration() {
   const sql = neon(DATABASE_URL);
 
   try {
-    // Read the migration file
-    const migrationSQL = readFileSync(join(__dirname, 'db', 'migrations', 'fix_schema_types.sql'), 'utf-8');
+    const migrationsDir = join(__dirname, 'db', 'migrations');
+    const migrationFiles = readdirSync(migrationsDir)
+      .filter(file => file.endsWith('.sql'))
+      .sort();
 
-    console.log('📝 Migration SQL loaded');
-    console.log('⚠️  Warning: This will truncate the analytics table and recreate click_events and messages tables\n');
+    if (migrationFiles.length === 0) {
+      console.log('ℹ️  No SQL migration files found.');
+      return;
+    }
 
-    // Split by semicolons and execute each statement
-    const statements = migrationSQL
-      .split(';')
-      .map(s => s.trim())
-      .filter(s => s.length > 0 && !s.startsWith('--'));
+    console.log(`📝 Found ${migrationFiles.length} migration file(s)\n`);
 
-    console.log(`📊 Executing ${statements.length} SQL statements...\n`);
+    for (const file of migrationFiles) {
+      const filePath = join(migrationsDir, file);
+      const migrationSQL = readFileSync(filePath, 'utf-8').trim();
 
-    for (let i = 0; i < statements.length; i++) {
-      const statement = statements[i];
-      if (statement) {
+      if (!migrationSQL) {
+        console.log(`⚠️  Skipping empty migration file: ${file}`);
+        continue;
+      }
+
+      console.log(`📄 Running migration: ${file}`);
+
+      // Preserve backwards compatibility messaging for the legacy fix script
+      if (file === 'fix_schema_types.sql') {
+        console.log('⚠️  Warning: This will truncate the analytics table and recreate click_events and messages tables');
+      }
+
+      const statements = migrationSQL
+        .split(';')
+        .map(statement => statement.trim())
+        .filter(statement => statement.length > 0 && !statement.startsWith('--'));
+
+      for (let i = 0; i < statements.length; i++) {
+        const statement = statements[i];
+
         try {
-          console.log(`[${i + 1}/${statements.length}] Executing...`);
           await sql(statement);
-          console.log(`✅ Success\n`);
+          console.log(`  ✅ [${i + 1}/${statements.length}] Success`);
         } catch (error) {
-          // Some statements might fail if columns don't exist, that's ok
-          if (error.message.includes('does not exist') || error.message.includes('already exists')) {
-            console.log(`⚠️  Skipped (already applied or doesn't exist)\n`);
+          if (typeof error.message === 'string' && (
+            error.message.includes('already exists') ||
+            error.message.includes('does not exist')
+          )) {
+            console.log(`  ⚠️  [${i + 1}/${statements.length}] Skipped (already applied or missing dependency)`);
           } else {
-            console.error(`❌ Error:`, error.message);
-            console.log('Statement:', statement.substring(0, 100) + '...\n');
+            console.error(`  ❌ [${i + 1}/${statements.length}] Error:`, error.message);
+            console.log('  Statement preview:', statement.substring(0, 200) + (statement.length > 200 ? '...' : ''));
           }
         }
       }
+
+      console.log(`✅ Completed: ${file}\n`);
     }
 
-    console.log('✅ Migration completed successfully!');
+    console.log('✅ Migration run complete!');
     console.log('\n📋 Summary:');
-    console.log('  - Analytics table columns converted to UUID');
-    console.log('  - Click events table recreated with correct schema');
-    console.log('  - Messages table recreated with correct schema');
-    console.log('  - Favorites table updated with created_at column');
-    console.log('  - Indexes created for performance');
+    console.log('  - Analytics, click events, messages, and favorites schema fixes ensured');
+    console.log('  - Notifications tables and enums ensured');
     console.log('\n🔄 Please restart your server for changes to take effect');
 
   } catch (error) {
