@@ -69,13 +69,23 @@ function isMissingRelationError(error: unknown, relation: string): boolean {
     return true;
   }
 
+function isMissingRelationError(error: unknown, relation: string): boolean {
+  if (!error || typeof error !== "object") return false;
+
+  const { code, message } = error as { code?: string; message?: unknown };
+
+  // Postgres undefined_table
+  if (typeof code === "string" && code === "42P01") return true;
+
   if (typeof message === "string") {
+    // Fast exact check (main)
+    if (message.includes(`relation "${relation}" does not exist`)) return true;
+
+    // Robust checks (feature)
     const normalized = message.toLowerCase();
     const target = relation.toLowerCase();
 
-    if (normalized.includes(`relation "${target}" does not exist`)) {
-      return true;
-    }
+    if (normalized.includes(`relation "${target}" does not exist`)) return true;
 
     const match = normalized.match(/relation "([^"\\]+)" does not exist/);
     if (match) {
@@ -84,6 +94,11 @@ function isMissingRelationError(error: unknown, relation: string): boolean {
         return true;
       }
     }
+  }
+
+  return false;
+}
+
   }
 
   return false;
@@ -105,7 +120,6 @@ function coerceCount(value: unknown): number {
 
   return 0;
 }
-
 function buildEphemeralNotification(notification: InsertNotification): Notification {
   const now = new Date();
   const partial = notification as Partial<Notification>;
@@ -178,6 +192,7 @@ function buildDefaultNotificationPreferences(userId: string): UserNotificationPr
     updatedAt: now,
   };
 }
+
 export interface IStorage {
   // Users
   getUser(id: string): Promise<User | undefined>;
