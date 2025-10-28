@@ -1,5 +1,5 @@
 import type { Express, Request } from "express";
-import { createServer, type Server } from "http";
+import { createServer, type Server, type IncomingMessage } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./localAuth";
@@ -451,6 +451,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Record conversion (companies can report sales/conversions)
+  app.post("/api/conversions/:applicationId", requireAuth, requireRole('company'), async (req, res) => {
+    try {
+      const { applicationId } = req.params;
+      const { saleAmount } = req.body;
+
+      // Verify the application belongs to an offer owned by this company
+      const application = await storage.getApplication(applicationId);
+      if (!application) {
+        return res.status(404).json({ error: "Application not found" });
+      }
+
+      const offer = await storage.getOffer(application.offerId);
+      if (!offer) {
+        return res.status(404).json({ error: "Offer not found" });
+      }
+
+      const userId = (req.user as any).id;
+      const companyProfile = await storage.getCompanyProfile(userId);
+      if (!companyProfile || offer.companyId !== companyProfile.id) {
+        return res.status(403).json({ error: "Forbidden: You don't own this offer" });
+      }
+
+      // Record the conversion and calculate earnings
+      await storage.recordConversion(applicationId, saleAmount ? parseFloat(saleAmount) : undefined);
+
+      res.json({
+        success: true,
+        message: "Conversion recorded successfully"
+      });
+    } catch (error: any) {
+      console.error('[Record Conversion] Error:', error);
+      res.status(500).send(error.message);
+    }
+  });
+
   // Analytics routes
   app.get("/api/analytics", requireAuth, async (req, res) => {
     try {
@@ -853,9 +889,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.post("/api/objects/upload", requireAuth, async (req, res) => {
-    const objectStorageService = new ObjectStorageService();
-    const uploadURL = await objectStorageService.getObjectEntityUploadURL();
-    res.json({ uploadURL });
+    try {
+      const objectStorageService = new ObjectStorageService();
+      const uploadParams = await objectStorageService.getObjectEntityUploadURL();
+      res.json(uploadParams);
+    } catch (error) {
+      console.error("Error generating Cloudinary upload parameters:", error);
+      res.status(500).json({
+        error: "Unable to generate upload parameters",
+        details: error instanceof Error ? error.message : undefined,
+      });
+    }
   });
 
   app.put("/api/company-logos", requireAuth, requireRole('company'), async (req, res) => {
@@ -987,11 +1031,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // RETAINER CONTRACTS ROUTES
   // =====================================================
 
-  // Get all open retainer contracts (for creators to browse)
+  // Get all retainer contracts for creator (open contracts + contracts assigned to them)
   app.get("/api/retainer-contracts", requireAuth, requireRole('creator'), async (req, res) => {
     try {
-      const contracts = await storage.getOpenRetainerContracts();
-      res.json(contracts);
+      const userId = (req.user as any).id;
+
+      // Get open contracts (for browsing/applying)
+      const openContracts = await storage.getOpenRetainerContracts();
+
+      // Get contracts assigned to this creator (their approved contracts)
+      const myContracts = await storage.getRetainerContractsByCreator(userId);
+
+      // Combine and deduplicate (in case a contract is both open and assigned)
+      const contractMap = new Map();
+
+      // Add my contracts first (higher priority)
+      myContracts.forEach(contract => {
+        contractMap.set(contract.id, contract);
+      });
+
+      // Add open contracts (only if not already in map)
+      openContracts.forEach(contract => {
+        if (!contractMap.has(contract.id)) {
+          contractMap.set(contract.id, contract);
+        }
+      });
+
+      // Convert map back to array
+      const allContracts = Array.from(contractMap.values());
+
+      res.json(allContracts);
     } catch (error: any) {
       res.status(500).send(error.message);
     }
@@ -1208,9 +1277,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!deliverable) return res.status(404).send("Deliverable not found");
       const contract = await storage.getRetainerContract(deliverable.contractId);
       if (!contract || contract.companyId !== companyProfile.id) return res.status(403).send("Forbidden");
+
+      // Approve the deliverable
       const approved = await storage.approveRetainerDeliverable(req.params.id, req.body.reviewNotes);
+
+      // Calculate payment amount per video (monthly amount / videos per month)
+      const monthlyAmount = parseFloat(contract.monthlyAmount);
+      const videosPerMonth = contract.videosPerMonth || 1;
+      const paymentPerVideo = monthlyAmount / videosPerMonth;
+
+      // Create payment for the approved deliverable
+      await storage.createPayment({
+        creatorId: deliverable.creatorId,
+        offerId: null, // Retainer payments don't have an offer ID
+        applicationId: null,
+        amount: paymentPerVideo.toFixed(2),
+        status: 'pending',
+        paymentType: 'retainer',
+        description: `Retainer payment for ${contract.title} - Month ${deliverable.monthNumber}, Video ${deliverable.videoNumber}`,
+      });
+
+      console.log(`[Retainer Payment] Created payment of $${paymentPerVideo.toFixed(2)} for creator ${deliverable.creatorId}`);
+
       res.json(approved);
     } catch (error: any) {
+      console.error('[Approve Deliverable] Error:', error);
       res.status(500).send(error.message);
     }
   });
@@ -1254,12 +1345,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
 
   // WebSocket server for real-time messaging
-  const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
+  const wss = new WebSocketServer({ noServer: true });
+
+  httpServer.on("upgrade", (request: IncomingMessage, socket, head) => {
+    const { url } = request;
+
+    if (!url || !url.startsWith("/ws")) {
+      return;
+    }
+
+    wss.handleUpgrade(request, socket, head, (ws) => {
+      wss.emit("connection", ws, request);
+    });
+  });
 
   // Store connected clients
   const clients = new Map<string, WebSocket>();
 
-  wss.on('connection', (ws: WebSocket, req: any) => {
+  wss.on('connection', (ws: WebSocket, req: IncomingMessage & { user?: { id?: string } }) => {
     const userId = req.user?.id; // This would need proper auth integration
     
     if (userId) {

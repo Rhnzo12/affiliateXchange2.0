@@ -49,15 +49,15 @@ export default function CreatorDashboard() {
         <p className="text-muted-foreground mt-1">Here's an overview of your creator journey</p>
       </div>
 
-      {/* Stats Grid */}
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+      {/* Stats Grid - Improved mobile spacing */}
+      <div className="grid gap-4 sm:gap-6 grid-cols-2 lg:grid-cols-4">
         <Card className="border-card-border">
-          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Earnings</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
+          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2 p-4 sm:p-6">
+            <CardTitle className="text-xs sm:text-sm font-medium">Total Earnings</CardTitle>
+            <DollarSign className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground shrink-0" />
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold font-mono">${stats?.totalEarnings || '0.00'}</div>
+          <CardContent className="p-4 pt-0 sm:p-6 sm:pt-0">
+            <div className="text-xl sm:text-2xl font-bold font-mono">${stats?.totalEarnings || '0.00'}</div>
             <p className="text-xs text-muted-foreground mt-1">
               +${stats?.monthlyEarnings || '0.00'} this month
             </p>
@@ -65,25 +65,25 @@ export default function CreatorDashboard() {
         </Card>
 
         <Card className="border-card-border">
-          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Active Offers</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2 p-4 sm:p-6">
+            <CardTitle className="text-xs sm:text-sm font-medium">Active Offers</CardTitle>
+            <TrendingUp className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground shrink-0" />
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats?.activeOffers || 0}</div>
+          <CardContent className="p-4 pt-0 sm:p-6 sm:pt-0">
+            <div className="text-xl sm:text-2xl font-bold">{stats?.activeOffers || 0}</div>
             <p className="text-xs text-muted-foreground mt-1">
-              {stats?.pendingApplications || 0} pending applications
+              {stats?.pendingApplications || 0} pending
             </p>
           </CardContent>
         </Card>
 
         <Card className="border-card-border">
-          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Clicks</CardTitle>
-            <FileText className="h-4 w-4 text-muted-foreground" />
+          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2 p-4 sm:p-6">
+            <CardTitle className="text-xs sm:text-sm font-medium">Total Clicks</CardTitle>
+            <FileText className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground shrink-0" />
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats?.totalClicks || 0}</div>
+          <CardContent className="p-4 pt-0 sm:p-6 sm:pt-0">
+            <div className="text-xl sm:text-2xl font-bold">{stats?.totalClicks || 0}</div>
             <p className="text-xs text-muted-foreground mt-1">
               {stats?.monthlyClicks || 0} this month
             </p>
@@ -91,46 +91,46 @@ export default function CreatorDashboard() {
         </Card>
 
         <Card className="border-card-border">
-          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Messages</CardTitle>
-            <MessageSquare className="h-4 w-4 text-muted-foreground" />
+          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2 p-4 sm:p-6">
+            <CardTitle className="text-xs sm:text-sm font-medium">Messages</CardTitle>
+            <MessageSquare className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground shrink-0" />
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats?.unreadMessages || 0}</div>
-            <p className="text-xs text-muted-foreground mt-1">Unread messages</p>
+          <CardContent className="p-4 pt-0 sm:p-6 sm:pt-0">
+            <div className="text-xl sm:text-2xl font-bold">{stats?.unreadMessages || 0}</div>
+            <p className="text-xs text-muted-foreground mt-1">Unread</p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Quick Actions */}
+      {/* Quick Actions - Better mobile touch targets */}
       <Card className="border-card-border">
         <CardHeader>
           <CardTitle>Quick Actions</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex flex-wrap gap-3">
-            <Link href="/browse">
-              <Button data-testid="button-browse-offers" className="gap-2">
-                <TrendingUp className="h-4 w-4" />
-                Browse New Offers
+          <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-3">
+            <Link href="/browse" className="col-span-2 sm:col-span-1">
+              <Button data-testid="button-browse-offers" className="gap-2 w-full h-11 sm:w-auto">
+                <TrendingUp className="h-5 w-5 sm:h-4 sm:w-4" />
+                <span className="text-base sm:text-sm">Browse New Offers</span>
               </Button>
             </Link>
             <Link href="/applications">
-              <Button variant="outline" data-testid="button-view-applications" className="gap-2">
-                <FileText className="h-4 w-4" />
-                My Applications
+              <Button variant="outline" data-testid="button-view-applications" className="gap-2 w-full h-11 sm:w-auto">
+                <FileText className="h-5 w-5 sm:h-4 sm:w-4" />
+                <span className="text-base sm:text-sm">Applications</span>
               </Button>
             </Link>
             <Link href="/analytics">
-              <Button variant="outline" data-testid="button-view-analytics" className="gap-2">
-                <TrendingUp className="h-4 w-4" />
-                View Analytics
+              <Button variant="outline" data-testid="button-view-analytics" className="gap-2 w-full h-11 sm:w-auto">
+                <TrendingUp className="h-5 w-5 sm:h-4 sm:w-4" />
+                <span className="text-base sm:text-sm">Analytics</span>
               </Button>
             </Link>
-            <Link href="/messages">
-              <Button variant="outline" data-testid="button-messages" className="gap-2">
-                <MessageSquare className="h-4 w-4" />
-                Messages
+            <Link href="/messages" className="col-span-2 sm:col-span-1">
+              <Button variant="outline" data-testid="button-messages" className="gap-2 w-full h-11 sm:w-auto">
+                <MessageSquare className="h-5 w-5 sm:h-4 sm:w-4" />
+                <span className="text-base sm:text-sm">Messages</span>
                 {stats?.unreadMessages > 0 && (
                   <Badge variant="destructive" className="ml-1">{stats.unreadMessages}</Badge>
                 )}

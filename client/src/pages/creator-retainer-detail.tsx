@@ -34,8 +34,9 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useAuth } from "@/hooks/useAuth";
-import { ObjectUploader } from "@/components/ObjectUploader";
+import { CloudinaryUploader } from "@/components/CloudinaryUploader";
 import { Label } from "@/components/ui/label";
+import type { UploadResult } from "@uppy/core";
 
 const uploadDeliverableSchema = z.object({
   platformUrl: z.string().url("Must be a valid URL").optional().or(z.literal("")),
@@ -85,20 +86,45 @@ export default function CreatorRetainerDetail() {
       method: "POST",
       credentials: "include",
     });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(errorText || "Failed to get upload parameters");
+    }
+
     const data = await response.json();
-    return {
-      method: "PUT" as const,
-      url: data.uploadURL,
-    };
+    return data; // Returns Cloudinary upload parameters
   };
 
-  const handleUploadComplete = (result: any) => {
+  const handleUploadComplete = (
+    result: UploadResult<Record<string, unknown>, Record<string, unknown>>
+  ) => {
     if (result.successful && result.successful[0]) {
-      const uploadedUrl = result.successful[0].uploadURL.split("?")[0];
-      setVideoUrl(uploadedUrl);
+      const successfulUpload = result.successful[0];
+      const uploadedUrl =
+        successfulUpload.response?.body?.uploadURL ||
+        successfulUpload.response?.body?.secure_url ||
+        successfulUpload.response?.body?.url ||
+        successfulUpload.uploadURL;
+
+      if (uploadedUrl) {
+        setVideoUrl(uploadedUrl as string);
+        toast({
+          title: "Video Uploaded",
+          description: "Video file uploaded successfully to Cloudinary. Now fill in the details.",
+        });
+      } else {
+        toast({
+          title: "Upload Completed",
+          description: "The file uploaded, but we couldn't determine its URL. Please try again.",
+          variant: "destructive",
+        });
+      }
+    } else if (result.failed && result.failed.length > 0) {
       toast({
-        title: "Video Uploaded",
-        description: "Video file uploaded successfully. Now fill in the details.",
+        title: "Upload Failed",
+        description: "We couldn't upload your video. Please try again.",
+        variant: "destructive",
       });
     }
   };
@@ -117,7 +143,7 @@ export default function CreatorRetainerDetail() {
         title: data.title,
         description: data.description || undefined,
       };
-      return await apiRequest("POST", "/api/retainer-deliverables", payload);
+      return await apiRequest("POST", "/api/creator/retainer-deliverables", payload);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/retainer-contracts", contractId, "deliverables"] });
@@ -291,14 +317,15 @@ export default function CreatorRetainerDetail() {
 
                   <div className="space-y-2">
                     <Label>Video File</Label>
-                    <ObjectUploader
+                    <CloudinaryUploader
                       maxNumberOfFiles={1}
                       maxFileSize={524288000}
                       onGetUploadParameters={handleGetUploadUrl}
                       onComplete={handleUploadComplete}
+                      allowedFileTypes={['video/*']}
                     >
                       {videoUrl ? "Video Uploaded ✓" : "Upload Video File"}
-                    </ObjectUploader>
+                    </CloudinaryUploader>
                     {videoUrl && (
                       <p className="text-xs text-muted-foreground">
                         Video uploaded successfully
