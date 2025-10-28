@@ -8,6 +8,7 @@ import { db } from "./db";
 import { offerVideos } from "@shared/schema";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
+import { NotificationService } from "./notifications/notificationService";
 import {
   insertCreatorProfileSchema,
   insertCompanyProfileSchema,
@@ -723,6 +724,125 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       res.status(500).send(error.message);
     }
+  });
+
+  // Initialize notification service
+  const notificationService = new NotificationService(storage);
+
+  // Notification routes
+  app.get("/api/notifications", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : 50;
+      const notifications = await storage.getNotifications(userId, limit);
+      res.json(notifications);
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  app.get("/api/notifications/unread", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const notifications = await storage.getUnreadNotifications(userId);
+      res.json(notifications);
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  app.get("/api/notifications/unread/count", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const count = await storage.getUnreadNotificationCount(userId);
+      res.json({ count });
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  app.post("/api/notifications/:id/read", requireAuth, async (req, res) => {
+    try {
+      const notification = await storage.markNotificationAsRead(req.params.id);
+      res.json(notification);
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  app.post("/api/notifications/read-all", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      await storage.markAllNotificationsAsRead(userId);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  app.delete("/api/notifications/:id", requireAuth, async (req, res) => {
+    try {
+      await storage.deleteNotification(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  app.delete("/api/notifications", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      await storage.clearAllNotifications(userId);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  // Notification preferences routes
+  app.get("/api/notifications/preferences", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      let preferences = await storage.getUserNotificationPreferences(userId);
+      
+      if (!preferences) {
+        preferences = await storage.createUserNotificationPreferences({ userId });
+      }
+      
+      res.json(preferences);
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  app.put("/api/notifications/preferences", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const preferences = await storage.updateUserNotificationPreferences(userId, req.body);
+      res.json(preferences);
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  app.post("/api/notifications/subscribe-push", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const { subscription } = req.body;
+      
+      await storage.updateUserNotificationPreferences(userId, {
+        pushSubscription: subscription,
+        pushNotifications: true,
+      });
+      
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  app.get("/api/notifications/vapid-public-key", (req, res) => {
+    res.json({ publicKey: process.env.VAPID_PUBLIC_KEY });
   });
 
   // Admin routes

@@ -20,6 +20,8 @@ import {
   retainerContracts,
   retainerApplications,
   retainerDeliverables,
+  notifications,
+  userNotificationPreferences,
   type User,
   type UpsertUser,
   type InsertUser,
@@ -50,6 +52,10 @@ import {
   type InsertRetainerApplication,
   type RetainerDeliverable,
   type InsertRetainerDeliverable,
+  type Notification,
+  type InsertNotification,
+  type UserNotificationPreferences,
+  type InsertUserNotificationPreferences,
 } from "@shared/schema";
 export interface IStorage {
   // Users
@@ -168,6 +174,25 @@ export interface IStorage {
   approveRetainerDeliverable(id: string, reviewNotes?: string): Promise<any>;
   rejectRetainerDeliverable(id: string, reviewNotes: string): Promise<any>;
   requestRevision(id: string, reviewNotes: string): Promise<any>;
+
+  // Notifications
+  createNotification(notification: InsertNotification): Promise<Notification>;
+  getNotifications(userId: string, limit?: number): Promise<Notification[]>;
+  getUnreadNotifications(userId: string): Promise<Notification[]>;
+  getUnreadNotificationCount(userId: string): Promise<number>;
+  markNotificationAsRead(id: string): Promise<Notification | undefined>;
+  markAllNotificationsAsRead(userId: string): Promise<void>;
+  deleteNotification(id: string): Promise<void>;
+  clearAllNotifications(userId: string): Promise<void>;
+
+  // User Notification Preferences
+  getUserNotificationPreferences(userId: string): Promise<UserNotificationPreferences | null>;
+  createUserNotificationPreferences(preferences: InsertUserNotificationPreferences): Promise<UserNotificationPreferences>;
+  updateUserNotificationPreferences(userId: string, updates: Partial<InsertUserNotificationPreferences>): Promise<UserNotificationPreferences | undefined>;
+
+  // Helper methods
+  getUserById(id: string): Promise<User | undefined>;
+  getAllUsers(): Promise<User[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1369,6 +1394,97 @@ export class DatabaseStorage implements IStorage {
       .where(eq(retainerDeliverables.id, id))
       .returning();
     return result[0];
+  }
+
+  // Notifications
+  async createNotification(notification: InsertNotification): Promise<Notification> {
+    const result = await db.insert(notifications).values(notification).returning();
+    return result[0];
+  }
+
+  async getNotifications(userId: string, limit: number = 50): Promise<Notification[]> {
+    const results = await db
+      .select()
+      .from(notifications)
+      .where(eq(notifications.userId, userId))
+      .orderBy(desc(notifications.createdAt))
+      .limit(limit);
+    return results;
+  }
+
+  async getUnreadNotifications(userId: string): Promise<Notification[]> {
+    const results = await db
+      .select()
+      .from(notifications)
+      .where(and(eq(notifications.userId, userId), eq(notifications.isRead, false)))
+      .orderBy(desc(notifications.createdAt));
+    return results;
+  }
+
+  async getUnreadNotificationCount(userId: string): Promise<number> {
+    const result = await db
+      .select({ count: count() })
+      .from(notifications)
+      .where(and(eq(notifications.userId, userId), eq(notifications.isRead, false)));
+    return result[0]?.count || 0;
+  }
+
+  async markNotificationAsRead(id: string): Promise<Notification | undefined> {
+    const result = await db
+      .update(notifications)
+      .set({ isRead: true, readAt: new Date() })
+      .where(eq(notifications.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async markAllNotificationsAsRead(userId: string): Promise<void> {
+    await db
+      .update(notifications)
+      .set({ isRead: true, readAt: new Date() })
+      .where(and(eq(notifications.userId, userId), eq(notifications.isRead, false)));
+  }
+
+  async deleteNotification(id: string): Promise<void> {
+    await db.delete(notifications).where(eq(notifications.id, id));
+  }
+
+  async clearAllNotifications(userId: string): Promise<void> {
+    await db.delete(notifications).where(eq(notifications.userId, userId));
+  }
+
+  // User Notification Preferences
+  async getUserNotificationPreferences(userId: string): Promise<UserNotificationPreferences | null> {
+    const result = await db
+      .select()
+      .from(userNotificationPreferences)
+      .where(eq(userNotificationPreferences.userId, userId))
+      .limit(1);
+    return result[0] || null;
+  }
+
+  async createUserNotificationPreferences(preferences: InsertUserNotificationPreferences): Promise<UserNotificationPreferences> {
+    const result = await db.insert(userNotificationPreferences).values(preferences).returning();
+    return result[0];
+  }
+
+  async updateUserNotificationPreferences(userId: string, updates: Partial<InsertUserNotificationPreferences>): Promise<UserNotificationPreferences | undefined> {
+    const result = await db
+      .update(userNotificationPreferences)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(userNotificationPreferences.userId, userId))
+      .returning();
+    return result[0];
+  }
+
+  // Helper methods
+  async getUserById(id: string): Promise<User | undefined> {
+    return this.getUser(id);
+  }
+
+  async getAllUsers(): Promise<User[]> {
+    const results = await db.select().from(users);
+    return results;
   }
 }
 

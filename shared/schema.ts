@@ -28,6 +28,20 @@ export const paymentStatusEnum = pgEnum('payment_status', ['pending', 'processin
 export const retainerStatusEnum = pgEnum('retainer_status', ['open', 'in_progress', 'completed', 'cancelled', 'paused']);
 export const retainerApplicationStatusEnum = pgEnum('retainer_application_status', ['pending', 'approved', 'rejected']);
 export const deliverableStatusEnum = pgEnum('deliverable_status', ['pending_review', 'approved', 'revision_requested', 'rejected']);
+export const notificationTypeEnum = pgEnum('notification_type', [
+  'application_status_change',
+  'new_message',
+  'payment_received',
+  'offer_approved',
+  'offer_rejected',
+  'new_application',
+  'review_received',
+  'system_announcement',
+  'registration_approved',
+  'registration_rejected',
+  'work_completion_approval',
+  'priority_listing_expiring'
+]);
 
 // Session storage table (Required for Replit Auth)
 export const sessions = pgTable(
@@ -546,6 +560,55 @@ export const systemSettingsRelations = relations(systemSettings, ({ one }) => ({
   }),
 }));
 
+// Notifications
+export const notifications = pgTable("notifications", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  type: notificationTypeEnum("type").notNull(),
+  title: varchar("title", { length: 200 }).notNull(),
+  message: text("message").notNull(),
+  linkUrl: varchar("link_url"),
+  metadata: jsonb("metadata"),
+  isRead: boolean("is_read").notNull().default(false),
+  readAt: timestamp("read_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const notificationsRelations = relations(notifications, ({ one }) => ({
+  user: one(users, {
+    fields: [notifications.userId],
+    references: [users.id],
+  }),
+}));
+
+// User Notification Preferences
+export const userNotificationPreferences = pgTable("user_notification_preferences", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().unique().references(() => users.id, { onDelete: 'cascade' }),
+  emailNotifications: boolean("email_notifications").notNull().default(true),
+  pushNotifications: boolean("push_notifications").notNull().default(true),
+  inAppNotifications: boolean("in_app_notifications").notNull().default(true),
+  emailApplicationStatus: boolean("email_application_status").notNull().default(true),
+  emailNewMessage: boolean("email_new_message").notNull().default(true),
+  emailPayment: boolean("email_payment").notNull().default(true),
+  emailOffer: boolean("email_offer").notNull().default(true),
+  emailReview: boolean("email_review").notNull().default(true),
+  emailSystem: boolean("email_system").notNull().default(true),
+  pushApplicationStatus: boolean("push_application_status").notNull().default(true),
+  pushNewMessage: boolean("push_new_message").notNull().default(true),
+  pushPayment: boolean("push_payment").notNull().default(true),
+  pushSubscription: jsonb("push_subscription"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const userNotificationPreferencesRelations = relations(userNotificationPreferences, ({ one }) => ({
+  user: one(users, {
+    fields: [userNotificationPreferences.userId],
+    references: [users.id],
+  }),
+}));
+
 // Type exports for Replit Auth
 export type UpsertUser = typeof users.$inferInsert;
 export type User = typeof users.$inferSelect;
@@ -570,6 +633,8 @@ export const insertRetainerContractSchema = createInsertSchema(retainerContracts
 export const createRetainerContractSchema = createInsertSchema(retainerContracts).omit({ id: true, companyId: true, createdAt: true, updatedAt: true, assignedCreatorId: true, startDate: true, endDate: true, status: true });
 export const insertRetainerApplicationSchema = createInsertSchema(retainerApplications).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertRetainerDeliverableSchema = createInsertSchema(retainerDeliverables).omit({ id: true, createdAt: true, submittedAt: true, reviewedAt: true });
+export const insertNotificationSchema = createInsertSchema(notifications).omit({ id: true, createdAt: true, readAt: true });
+export const insertUserNotificationPreferencesSchema = createInsertSchema(userNotificationPreferences).omit({ id: true, createdAt: true, updatedAt: true });
 
 // Type exports
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -603,3 +668,7 @@ export type RetainerApplication = typeof retainerApplications.$inferSelect;
 export type InsertRetainerApplication = z.infer<typeof insertRetainerApplicationSchema>;
 export type RetainerDeliverable = typeof retainerDeliverables.$inferSelect;
 export type InsertRetainerDeliverable = z.infer<typeof insertRetainerDeliverableSchema>;
+export type Notification = typeof notifications.$inferSelect;
+export type InsertNotification = z.infer<typeof insertNotificationSchema>;
+export type UserNotificationPreferences = typeof userNotificationPreferences.$inferSelect;
+export type InsertUserNotificationPreferences = z.infer<typeof insertUserNotificationPreferencesSchema>;
