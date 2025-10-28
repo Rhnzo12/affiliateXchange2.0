@@ -1,10 +1,22 @@
-// DISABLE WebSocket - Use this if you don't need real-time features
-if (import.meta.env.DEV) {
-  // @ts-ignore - Block all WebSocket connections
-  window.WebSocket = function(url, protocols) {
-    console.warn('[WebSocket BLOCKED]', url?.toString());
-    
-    // Return a fake closed WebSocket
+import { createRoot } from "react-dom/client";
+import App from "./App";
+import "./index.css";
+
+// Allow disabling WebSocket connections explicitly in development when needed.
+// By default, keep real-time features enabled so messaging works out of the box.
+const shouldDisableWebSocket =
+  typeof window !== "undefined" &&
+  import.meta.env.DEV &&
+  import.meta.env.VITE_DISABLE_WEBSOCKETS === "true";
+
+if (shouldDisableWebSocket) {
+  const OriginalWebSocket = window.WebSocket;
+
+  // @ts-ignore - Block all WebSocket connections when flag is enabled
+  window.WebSocket = function (url, protocols) {
+    console.warn("[WebSocket BLOCKED]", url?.toString());
+
+    // Return a fake closed WebSocket so callers gracefully detect no connection
     return {
       CONNECTING: 0,
       OPEN: 1,
@@ -16,23 +28,22 @@ if (import.meta.env.DEV) {
       addEventListener: () => {},
       removeEventListener: () => {},
       dispatchEvent: () => false,
-      url: url?.toString() || '',
-      protocol: '',
-      extensions: '',
+      url: url?.toString() || "",
+      protocol: "",
+      extensions: "",
       bufferedAmount: 0,
-      binaryType: 'blob' as BinaryType,
+      binaryType: "blob" as BinaryType,
       onopen: null,
       onclose: null,
       onerror: null,
       onmessage: null,
     } as WebSocket;
   };
-  
-  console.log('[Dev Mode] WebSocket connections DISABLED');
-}
 
-import { createRoot } from "react-dom/client";
-import App from "./App";
-import "./index.css";
+  console.log("[Dev Mode] WebSocket connections DISABLED via VITE_DISABLE_WEBSOCKETS=true");
+
+  // Expose the original constructor for anyone who needs manual overrides during debugging.
+  (window as any).__ORIGINAL_WEBSOCKET__ = OriginalWebSocket;
+}
 
 createRoot(document.getElementById("root")!).render(<App />);

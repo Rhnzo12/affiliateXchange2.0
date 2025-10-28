@@ -631,7 +631,7 @@ useEffect(() => {
                         sendMessage();
                       }
                     }}
-                    disabled={!isConnected}
+                    disabled={!isConnected && !isConnecting}
                     data-testid="input-message"
                     className="h-11 text-base"
                   />
@@ -647,7 +647,7 @@ useEffect(() => {
                 </div>
                 {!isConnected && (
                   <p className="text-xs text-muted-foreground mt-2 text-center">
-                    Reconnecting to chat server...
+                    {isConnecting ? "Connecting to chat server..." : "Reconnecting to chat server..."}
                   </p>
                 )}
               </div>
