@@ -228,7 +228,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createUser(user: InsertUser): Promise<User> {
-    const result = await db.insert(users).values(user).returning();
+    const result = await db.insert(users).values({
+      ...user,
+      id: randomUUID(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }).returning();
     return result[0];
   }
 
@@ -248,7 +253,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createCreatorProfile(profile: InsertCreatorProfile): Promise<CreatorProfile> {
-    const result = await db.insert(creatorProfiles).values(profile).returning();
+    const result = await db.insert(creatorProfiles).values({
+      ...profile,
+      id: randomUUID(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }).returning();
     return result[0];
   }
 
@@ -273,7 +283,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createCompanyProfile(profile: InsertCompanyProfile): Promise<CompanyProfile> {
-    const result = await db.insert(companyProfiles).values(profile).returning();
+    const result = await db.insert(companyProfiles).values({
+      ...profile,
+      id: randomUUID(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }).returning();
     return result[0];
   }
 
@@ -419,7 +434,11 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createOfferVideo(video: InsertOfferVideo): Promise<OfferVideo> {
-    const result = await db.insert(offerVideos).values(video).returning();
+    const result = await db.insert(offerVideos).values({
+      ...video,
+      id: randomUUID(),
+      createdAt: new Date(),
+    }).returning();
     return result[0];
   }
 
@@ -462,7 +481,10 @@ export class DatabaseStorage implements IStorage {
 
     const result = await db.insert(applications).values({
       ...application,
+      id: randomUUID(),
       autoApprovalScheduledAt: autoApprovalTime,
+      createdAt: new Date(),
+      updatedAt: new Date(),
     }).returning();
     return result[0];
   }
@@ -660,7 +682,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createConversation(data: any): Promise<any> {
-    const result = await db.insert(conversations).values(data).returning();
+    const result = await db.insert(conversations).values({
+      ...data,
+      id: randomUUID(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }).returning();
     return result[0];
   }
 
@@ -709,7 +736,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createReview(review: InsertReview): Promise<Review> {
-    const result = await db.insert(reviews).values(review).returning();
+    const result = await db.insert(reviews).values({
+      ...review,
+      id: randomUUID(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }).returning();
     return result[0];
   }
 
@@ -787,7 +819,11 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createFavorite(favorite: InsertFavorite): Promise<Favorite> {
-    const result = await db.insert(favorites).values(favorite).returning();
+    const result = await db.insert(favorites).values({
+      ...favorite,
+      id: randomUUID(),
+      createdAt: new Date(),
+    }).returning();
     return result[0];
   }
 
@@ -886,12 +922,16 @@ export class DatabaseStorage implements IStorage {
 
     // Store individual click event with full metadata
     await db.insert(clickEvents).values({
+      id: randomUUID(),
       applicationId,
+      offerId: application.offerId,
+      creatorId: application.creatorId,
       ipAddress: clickData.ip,
       userAgent: clickData.userAgent,
       referer: clickData.referer,
       country,
       city,
+      timestamp: new Date(),
     });
 
     const today = new Date();
@@ -928,12 +968,17 @@ export class DatabaseStorage implements IStorage {
     } else {
       // Create new record
       await db.insert(analytics).values({
+        id: randomUUID(),
         applicationId,
+        offerId: application.offerId,
+        creatorId: application.creatorId,
         date: today,
         clicks: 1,
         uniqueClicks: uniqueIpsToday.length,
         conversions: 0,
         earnings: '0',
+        createdAt: new Date(),
+        updatedAt: new Date(),
       });
     }
 
@@ -1016,23 +1061,31 @@ export class DatabaseStorage implements IStorage {
     } else {
       // Create new record
       await db.insert(analytics).values({
+        id: randomUUID(),
         applicationId,
+        offerId: application.offerId,
+        creatorId: application.creatorId,
         date: today,
         clicks: 0,
         uniqueClicks: 0,
         conversions: 1,
         earnings: earnings.toFixed(2),
+        createdAt: new Date(),
+        updatedAt: new Date(),
       });
     }
 
     // Create payment record for creator
     await this.createPayment({
-      creatorId: application.creatorId,
-      offerId: application.offerId,
       applicationId: applicationId,
-      amount: earnings.toFixed(2),
+      creatorId: application.creatorId,
+      companyId: offer.companyId,
+      offerId: application.offerId,
+      grossAmount: earnings.toFixed(2),
+      platformFeeAmount: '0',
+      stripeFeeAmount: '0',
+      netAmount: earnings.toFixed(2),
       status: 'pending',
-      paymentType: 'commission',
       description: `Commission for ${offer.commissionType} conversion`,
     });
 
@@ -1045,7 +1098,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createPaymentSetting(setting: InsertPaymentSetting): Promise<PaymentSetting> {
-    const result = await db.insert(paymentSettings).values(setting).returning();
+    const result = await db.insert(paymentSettings).values({
+      ...setting,
+      id: randomUUID(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }).returning();
     return result[0];
   }
 
@@ -1055,7 +1113,12 @@ export class DatabaseStorage implements IStorage {
 
   // Payments
   async createPayment(payment: InsertPayment): Promise<Payment> {
-    const result = await db.insert(payments).values(payment).returning();
+    const result = await db.insert(payments).values({
+      ...payment,
+      id: randomUUID(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }).returning();
     return result[0];
   }
 
@@ -1181,7 +1244,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createRetainerContract(contract: InsertRetainerContract): Promise<RetainerContract> {
-    const result = await db.insert(retainerContracts).values(contract).returning();
+    const result = await db.insert(retainerContracts).values({
+      ...contract,
+      id: randomUUID(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }).returning();
     return result[0];
   }
 
@@ -1252,7 +1320,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createRetainerApplication(application: InsertRetainerApplication): Promise<RetainerApplication> {
-    const result = await db.insert(retainerApplications).values(application).returning();
+    const result = await db.insert(retainerApplications).values({
+      ...application,
+      id: randomUUID(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }).returning();
     return result[0];
   }
 
@@ -1344,7 +1417,11 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createRetainerDeliverable(deliverable: InsertRetainerDeliverable): Promise<RetainerDeliverable> {
-    const result = await db.insert(retainerDeliverables).values(deliverable).returning();
+    const result = await db.insert(retainerDeliverables).values({
+      ...deliverable,
+      id: randomUUID(),
+      createdAt: new Date(),
+    }).returning();
     return result[0];
   }
 
@@ -1398,7 +1475,11 @@ export class DatabaseStorage implements IStorage {
 
   // Notifications
   async createNotification(notification: InsertNotification): Promise<Notification> {
-    const result = await db.insert(notifications).values(notification).returning();
+    const result = await db.insert(notifications).values({
+      ...notification,
+      id: randomUUID(),
+      createdAt: new Date(),
+    }).returning();
     return result[0];
   }
 
@@ -1464,7 +1545,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createUserNotificationPreferences(preferences: InsertUserNotificationPreferences): Promise<UserNotificationPreferences> {
-    const result = await db.insert(userNotificationPreferences).values(preferences).returning();
+    const result = await db.insert(userNotificationPreferences).values({
+      ...preferences,
+      id: randomUUID(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }).returning();
     return result[0];
   }
 

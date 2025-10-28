@@ -11,7 +11,6 @@ import {
   decimal,
   boolean,
   pgEnum,
-  uuid,  // ← ADDED uuid import
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -56,7 +55,7 @@ export const sessions = pgTable(
 
 // User storage table
 export const users = pgTable("users", {
-  id: uuid("id").primaryKey().defaultRandom(),  // ← CHANGED to uuid
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   username: varchar("username").unique().notNull(),
   email: varchar("email").unique().notNull(),
   password: varchar("password").notNull(),
@@ -86,8 +85,8 @@ export const usersRelations = relations(users, ({ one, many }) => ({
 
 // Creator profiles
 export const creatorProfiles = pgTable("creator_profiles", {
-  id: uuid("id").primaryKey().defaultRandom(),  // ← CHANGED to uuid
-  userId: uuid("user_id").notNull().unique().references(() => users.id, { onDelete: 'cascade' }),  // ← CHANGED to uuid
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().unique().references(() => users.id, { onDelete: 'cascade' }),
   bio: text("bio"),
   youtubeUrl: varchar("youtube_url"),
   tiktokUrl: varchar("tiktok_url"),
@@ -109,8 +108,8 @@ export const creatorProfilesRelations = relations(creatorProfiles, ({ one }) => 
 
 // Company profiles
 export const companyProfiles = pgTable("company_profiles", {
-  id: uuid("id").primaryKey().defaultRandom(),  // ← CHANGED to uuid
-  userId: uuid("user_id").notNull().unique().references(() => users.id, { onDelete: 'cascade' }),  // ← CHANGED to uuid
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().unique().references(() => users.id, { onDelete: 'cascade' }),
   legalName: varchar("legal_name").notNull(),
   tradeName: varchar("trade_name"),
   industry: varchar("industry"),
@@ -141,8 +140,8 @@ export const companyProfilesRelations = relations(companyProfiles, ({ one, many 
 
 // Offers
 export const offers = pgTable("offers", {
-  id: uuid("id").primaryKey().defaultRandom(),  // ← CHANGED to uuid
-  companyId: uuid("company_id").notNull().references(() => companyProfiles.id, { onDelete: 'cascade' }),  // ← CHANGED to uuid
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: varchar("company_id").notNull().references(() => companyProfiles.id, { onDelete: 'cascade' }),
   title: varchar("title", { length: 100 }).notNull(),
   productName: varchar("product_name").notNull(),
   shortDescription: varchar("short_description", { length: 200 }).notNull(),
@@ -187,8 +186,8 @@ export const offersRelations = relations(offers, ({ one, many }) => ({
 
 // Offer Videos
 export const offerVideos = pgTable("offer_videos", {
-  id: uuid("id").primaryKey().defaultRandom(),  // ← CHANGED to uuid
-  offerId: uuid("offer_id").notNull().references(() => offers.id, { onDelete: 'cascade' }),  // ← CHANGED to uuid
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  offerId: varchar("offer_id").notNull().references(() => offers.id, { onDelete: 'cascade' }),
   title: varchar("title", { length: 100 }).notNull(),
   description: varchar("description", { length: 300 }),
   creatorCredit: varchar("creator_credit"),
@@ -209,9 +208,9 @@ export const offerVideosRelations = relations(offerVideos, ({ one }) => ({
 
 // Applications
 export const applications = pgTable("applications", {
-  id: uuid("id").primaryKey().defaultRandom(),  // ← CHANGED to uuid
-  creatorId: uuid("creator_id").notNull().references(() => users.id, { onDelete: 'cascade' }),  // ← CHANGED to uuid
-  offerId: uuid("offer_id").notNull().references(() => offers.id, { onDelete: 'cascade' }),  // ← CHANGED to uuid
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  creatorId: varchar("creator_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  offerId: varchar("offer_id").notNull().references(() => offers.id, { onDelete: 'cascade' }),
   message: text("message"),
   status: applicationStatusEnum("status").notNull().default('pending'),
   trackingLink: varchar("tracking_link"),
@@ -238,11 +237,11 @@ export const applicationsRelations = relations(applications, ({ one, many }) => 
 
 // Conversations
 export const conversations = pgTable("conversations", {
-  id: uuid("id").primaryKey().defaultRandom(),  // ← CHANGED to uuid
-  applicationId: uuid("application_id").notNull().references(() => applications.id, { onDelete: 'cascade' }),  // ← CHANGED to uuid
-  creatorId: uuid("creator_id").notNull().references(() => users.id, { onDelete: 'cascade' }),  // ← CHANGED to uuid
-  companyId: uuid("company_id").notNull().references(() => companyProfiles.id, { onDelete: 'cascade' }),  // ← CHANGED to uuid
-  offerId: uuid("offer_id").notNull().references(() => offers.id, { onDelete: 'cascade' }),  // ← CHANGED to uuid
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  applicationId: varchar("application_id").notNull().references(() => applications.id, { onDelete: 'cascade' }),
+  creatorId: varchar("creator_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  companyId: varchar("company_id").notNull().references(() => companyProfiles.id, { onDelete: 'cascade' }),
+  offerId: varchar("offer_id").notNull().references(() => offers.id, { onDelete: 'cascade' }),
   lastMessageAt: timestamp("last_message_at"),
   creatorUnreadCount: integer("creator_unread_count").default(0),
   companyUnreadCount: integer("company_unread_count").default(0),
@@ -268,9 +267,9 @@ export const conversationsRelations = relations(conversations, ({ one, many }) =
 
 // Messages
 export const messages = pgTable("messages", {
-  id: uuid("id").primaryKey().defaultRandom(),  // ← CHANGED to uuid
-  conversationId: uuid("conversation_id").notNull().references(() => conversations.id, { onDelete: 'cascade' }),  // ← CHANGED to uuid
-  senderId: uuid("sender_id").notNull().references(() => users.id, { onDelete: 'cascade' }),  // ← CHANGED to uuid
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  conversationId: varchar("conversation_id").notNull().references(() => conversations.id, { onDelete: 'cascade' }),
+  senderId: varchar("sender_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
   content: text("content").notNull(),
   isRead: boolean("is_read").default(false),
   createdAt: timestamp("created_at").defaultNow(),
@@ -289,10 +288,10 @@ export const messagesRelations = relations(messages, ({ one }) => ({
 
 // Reviews
 export const reviews = pgTable("reviews", {
-  id: uuid("id").primaryKey().defaultRandom(),  // ← CHANGED to uuid
-  applicationId: uuid("application_id").notNull().references(() => applications.id, { onDelete: 'cascade' }),  // ← CHANGED to uuid
-  creatorId: uuid("creator_id").notNull().references(() => users.id, { onDelete: 'cascade' }),  // ← CHANGED to uuid
-  companyId: uuid("company_id").notNull().references(() => companyProfiles.id, { onDelete: 'cascade' }),  // ← CHANGED to uuid
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  applicationId: varchar("application_id").notNull().references(() => applications.id, { onDelete: 'cascade' }),
+  creatorId: varchar("creator_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  companyId: varchar("company_id").notNull().references(() => companyProfiles.id, { onDelete: 'cascade' }),
   reviewText: text("review_text"),
   overallRating: integer("overall_rating").notNull(),
   paymentSpeedRating: integer("payment_speed_rating"),
@@ -304,7 +303,7 @@ export const reviews = pgTable("reviews", {
   isEdited: boolean("is_edited").default(false),
   adminNote: text("admin_note"),
   isApproved: boolean("is_approved").default(true),
-  approvedBy: uuid("approved_by"),  // ← CHANGED to uuid
+  approvedBy: varchar("approved_by"),
   approvedAt: timestamp("approved_at"),
   isHidden: boolean("is_hidden").default(false),
   createdAt: timestamp("created_at").defaultNow(),
@@ -328,9 +327,9 @@ export const reviewsRelations = relations(reviews, ({ one }) => ({
 
 // Favorites
 export const favorites = pgTable("favorites", {
-  id: uuid("id").primaryKey().defaultRandom(),  // ← CHANGED to uuid
-  creatorId: uuid("creator_id").notNull().references(() => users.id, { onDelete: 'cascade' }),  // ← CHANGED to uuid
-  offerId: uuid("offer_id").notNull().references(() => offers.id, { onDelete: 'cascade' }),  // ← CHANGED to uuid
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  creatorId: varchar("creator_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  offerId: varchar("offer_id").notNull().references(() => offers.id, { onDelete: 'cascade' }),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -347,14 +346,18 @@ export const favoritesRelations = relations(favorites, ({ one }) => ({
 
 // Analytics
 export const analytics = pgTable("analytics", {
-  id: uuid("id").primaryKey().defaultRandom(),  // ← CHANGED to uuid
-  applicationId: uuid("application_id").notNull().references(() => applications.id, { onDelete: 'cascade' }),  // ← CHANGED to uuid
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  applicationId: varchar("application_id").notNull().references(() => applications.id, { onDelete: 'cascade' }),
+  offerId: varchar("offer_id").notNull().references(() => offers.id, { onDelete: 'cascade' }),
+  creatorId: varchar("creator_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
   date: timestamp("date").notNull(),
   clicks: integer("clicks").default(0),
   uniqueClicks: integer("unique_clicks").default(0),
   conversions: integer("conversions").default(0),
   earnings: decimal("earnings", { precision: 10, scale: 2 }).default('0'),
+  earningsPaid: decimal("earnings_paid", { precision: 10, scale: 2 }).default('0'),
   createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
 export const analyticsRelations = relations(analytics, ({ one }) => ({
@@ -366,11 +369,13 @@ export const analyticsRelations = relations(analytics, ({ one }) => ({
 
 // Click Events
 export const clickEvents = pgTable("click_events", {
-  id: uuid("id").primaryKey().defaultRandom(),  // ← CHANGED to uuid
-  applicationId: uuid("application_id").notNull().references(() => applications.id, { onDelete: 'cascade' }),  // ← CHANGED to uuid
-  ipAddress: varchar("ip_address"),
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  applicationId: varchar("application_id").notNull().references(() => applications.id, { onDelete: 'cascade' }),
+  offerId: varchar("offer_id").notNull().references(() => offers.id, { onDelete: 'cascade' }),
+  creatorId: varchar("creator_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  ipAddress: varchar("ip_address").notNull(),
   userAgent: text("user_agent"),
-  referer: varchar("referer"),
+  referer: text("referer"),
   country: varchar("country"),
   city: varchar("city"),
   timestamp: timestamp("timestamp").defaultNow(),
@@ -385,8 +390,8 @@ export const clickEventsRelations = relations(clickEvents, ({ one }) => ({
 
 // Payment Settings
 export const paymentSettings = pgTable("payment_settings", {
-  id: uuid("id").primaryKey().defaultRandom(),  // ← CHANGED to uuid
-  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),  // ← CHANGED to uuid
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
   payoutMethod: payoutMethodEnum("payout_method").notNull(),
   payoutEmail: varchar("payout_email"),
   bankRoutingNumber: varchar("bank_routing_number"),
@@ -409,11 +414,11 @@ export const paymentSettingsRelations = relations(paymentSettings, ({ one }) => 
 
 // Payments
 export const payments = pgTable("payments", {
-  id: uuid("id").primaryKey().defaultRandom(),  // ← CHANGED to uuid
-  applicationId: uuid("application_id").notNull().references(() => applications.id, { onDelete: 'cascade' }),  // ← CHANGED to uuid
-  creatorId: uuid("creator_id").notNull().references(() => users.id, { onDelete: 'cascade' }),  // ← CHANGED to uuid
-  companyId: uuid("company_id").notNull().references(() => companyProfiles.id, { onDelete: 'cascade' }),  // ← CHANGED to uuid
-  offerId: uuid("offer_id").notNull().references(() => offers.id, { onDelete: 'cascade' }),  // ← CHANGED to uuid
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  applicationId: varchar("application_id").notNull().references(() => applications.id, { onDelete: 'cascade' }),
+  creatorId: varchar("creator_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  companyId: varchar("company_id").notNull().references(() => companyProfiles.id, { onDelete: 'cascade' }),
+  offerId: varchar("offer_id").notNull().references(() => offers.id, { onDelete: 'cascade' }),
   grossAmount: decimal("gross_amount", { precision: 10, scale: 2 }).notNull(),
   platformFeeAmount: decimal("platform_fee_amount", { precision: 10, scale: 2 }).notNull(),
   stripeFeeAmount: decimal("stripe_fee_amount", { precision: 10, scale: 2 }).notNull(),
@@ -452,8 +457,8 @@ export const paymentsRelations = relations(payments, ({ one }) => ({
 
 // Retainer Contracts
 export const retainerContracts = pgTable("retainer_contracts", {
-  id: uuid("id").primaryKey().defaultRandom(),  // ← CHANGED to uuid
-  companyId: uuid("company_id").notNull().references(() => companyProfiles.id, { onDelete: 'cascade' }),  // ← CHANGED to uuid
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: varchar("company_id").notNull().references(() => companyProfiles.id, { onDelete: 'cascade' }),
   title: varchar("title", { length: 150 }).notNull(),
   description: text("description").notNull(),
   monthlyAmount: decimal("monthly_amount", { precision: 10, scale: 2 }).notNull(),
@@ -466,7 +471,7 @@ export const retainerContracts = pgTable("retainer_contracts", {
   minimumFollowers: integer("minimum_followers"),
   niches: text("niches").array().default(sql`ARRAY[]::text[]`),
   status: retainerStatusEnum("status").notNull().default('open'),
-  assignedCreatorId: uuid("assigned_creator_id").references(() => users.id, { onDelete: 'set null' }),  // ← CHANGED to uuid
+  assignedCreatorId: varchar("assigned_creator_id").references(() => users.id, { onDelete: 'set null' }),
   startDate: timestamp("start_date"),
   endDate: timestamp("end_date"),
   createdAt: timestamp("created_at").defaultNow(),
@@ -488,9 +493,9 @@ export const retainerContractsRelations = relations(retainerContracts, ({ one, m
 
 // Retainer Applications
 export const retainerApplications = pgTable("retainer_applications", {
-  id: uuid("id").primaryKey().defaultRandom(),  // ← CHANGED to uuid
-  contractId: uuid("contract_id").notNull().references(() => retainerContracts.id, { onDelete: 'cascade' }),  // ← CHANGED to uuid
-  creatorId: uuid("creator_id").notNull().references(() => users.id, { onDelete: 'cascade' }),  // ← CHANGED to uuid
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  contractId: varchar("contract_id").notNull().references(() => retainerContracts.id, { onDelete: 'cascade' }),
+  creatorId: varchar("creator_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
   message: text("message").notNull(),
   portfolioLinks: text("portfolio_links").array().default(sql`ARRAY[]::text[]`),
   proposedStartDate: timestamp("proposed_start_date"),
@@ -512,9 +517,9 @@ export const retainerApplicationsRelations = relations(retainerApplications, ({ 
 
 // Retainer Deliverables
 export const retainerDeliverables = pgTable("retainer_deliverables", {
-  id: uuid("id").primaryKey().defaultRandom(),  // ← CHANGED to uuid
-  contractId: uuid("contract_id").notNull().references(() => retainerContracts.id, { onDelete: 'cascade' }),  // ← CHANGED to uuid
-  creatorId: uuid("creator_id").notNull().references(() => users.id, { onDelete: 'cascade' }),  // ← CHANGED to uuid
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  contractId: varchar("contract_id").notNull().references(() => retainerContracts.id, { onDelete: 'cascade' }),
+  creatorId: varchar("creator_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
   monthNumber: integer("month_number").notNull(),
   videoNumber: integer("video_number").notNull(),
   videoUrl: varchar("video_url").notNull(),
@@ -543,12 +548,12 @@ export const retainerDeliverablesRelations = relations(retainerDeliverables, ({ 
 
 // System Settings
 export const systemSettings = pgTable("system_settings", {
-  id: uuid("id").primaryKey().defaultRandom(),  // ← CHANGED to uuid
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   key: varchar("key").notNull().unique(),
   value: jsonb("value").notNull(),
   description: text("description"),
   category: varchar("category").notNull(),
-  updatedBy: uuid("updated_by").references(() => users.id, { onDelete: 'set null' }),  // ← CHANGED to uuid
+  updatedBy: varchar("updated_by").references(() => users.id, { onDelete: 'set null' }),
   updatedAt: timestamp("updated_at").defaultNow(),
   createdAt: timestamp("created_at").defaultNow(),
 });
@@ -562,8 +567,8 @@ export const systemSettingsRelations = relations(systemSettings, ({ one }) => ({
 
 // Notifications
 export const notifications = pgTable("notifications", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
   type: notificationTypeEnum("type").notNull(),
   title: varchar("title", { length: 200 }).notNull(),
   message: text("message").notNull(),
@@ -583,8 +588,8 @@ export const notificationsRelations = relations(notifications, ({ one }) => ({
 
 // User Notification Preferences
 export const userNotificationPreferences = pgTable("user_notification_preferences", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  userId: uuid("user_id").notNull().unique().references(() => users.id, { onDelete: 'cascade' }),
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().unique().references(() => users.id, { onDelete: 'cascade' }),
   emailNotifications: boolean("email_notifications").notNull().default(true),
   pushNotifications: boolean("push_notifications").notNull().default(true),
   inAppNotifications: boolean("in_app_notifications").notNull().default(true),
