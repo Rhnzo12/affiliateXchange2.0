@@ -2,7 +2,6 @@ import 'dotenv/config'
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
-import { WebSocketServer } from 'ws';
 
 const app = express();
 app.use(express.json());
@@ -40,31 +39,6 @@ app.use((req, res, next) => {
 
 (async () => {
   const server = await registerRoutes(app);
-
-  // Setup WebSocket server
-  const wss = new WebSocketServer({ server });
-  
-  wss.on('connection', (ws, req) => {
-    log(`WebSocket client connected from ${req.socket.remoteAddress}`);
-    
-    ws.on('message', (message) => {
-      log(`WebSocket message received: ${message}`);
-      // Handle messages here
-    });
-    
-    ws.on('close', () => {
-      log('WebSocket client disconnected');
-    });
-    
-    ws.on('error', (error) => {
-      log(`WebSocket error: ${error.message}`);
-    });
-    
-    // Send welcome message
-    ws.send(JSON.stringify({ type: 'connected', message: 'WebSocket connected' }));
-  });
-
-  log('WebSocket server initialized');
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
