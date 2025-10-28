@@ -69,8 +69,36 @@ function isMissingRelationError(error: unknown, relation: string): boolean {
     return true;
   }
 
-  if (typeof message === "string" && message.includes(`relation "${relation}" does not exist`)) {
-    return true;
+function isMissingRelationError(error: unknown, relation: string): boolean {
+  if (!error || typeof error !== "object") return false;
+
+  const { code, message } = error as { code?: string; message?: unknown };
+
+  // Postgres undefined_table
+  if (typeof code === "string" && code === "42P01") return true;
+
+  if (typeof message === "string") {
+    // Fast exact check (main)
+    if (message.includes(`relation "${relation}" does not exist`)) return true;
+
+    // Robust checks (feature)
+    const normalized = message.toLowerCase();
+    const target = relation.toLowerCase();
+
+    if (normalized.includes(`relation "${target}" does not exist`)) return true;
+
+    const match = normalized.match(/relation "([^"\\]+)" does not exist/);
+    if (match) {
+      const relationName = match[1];
+      if (relationName === target || relationName.endsWith(`.${target}`)) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
   }
 
   return false;
@@ -92,6 +120,79 @@ function coerceCount(value: unknown): number {
 
   return 0;
 }
+function buildEphemeralNotification(notification: InsertNotification): Notification {
+  const now = new Date();
+  const partial = notification as Partial<Notification>;
+
+  const isRead = partial.isRead ?? false;
+  const readAt = isRead ? partial.readAt ?? now : null;
+
+  return {
+    id: randomUUID(),
+    userId: notification.userId,
+    type: notification.type,
+    title: notification.title,
+    message: notification.message,
+    linkUrl: notification.linkUrl ?? null,
+    metadata: notification.metadata ?? null,
+    isRead,
+    readAt,
+    createdAt: now,
+  };
+}
+
+function buildEphemeralReview(review: InsertReview): Review {
+  const now = new Date();
+  const partial = review as Partial<Review>;
+
+  return {
+    id: randomUUID(),
+    applicationId: review.applicationId,
+    creatorId: review.creatorId,
+    companyId: review.companyId,
+    reviewText: partial.reviewText ?? null,
+    overallRating: review.overallRating,
+    paymentSpeedRating: partial.paymentSpeedRating ?? null,
+    communicationRating: partial.communicationRating ?? null,
+    offerQualityRating: partial.offerQualityRating ?? null,
+    supportRating: partial.supportRating ?? null,
+    companyResponse: partial.companyResponse ?? null,
+    companyRespondedAt: partial.companyRespondedAt ?? null,
+    isEdited: partial.isEdited ?? false,
+    adminNote: partial.adminNote ?? null,
+    isApproved: partial.isApproved ?? true,
+    approvedBy: partial.approvedBy ?? null,
+    approvedAt: partial.approvedAt ?? null,
+    isHidden: partial.isHidden ?? false,
+    createdAt: partial.createdAt ?? now,
+    updatedAt: partial.updatedAt ?? now,
+  };
+}
+
+function buildDefaultNotificationPreferences(userId: string): UserNotificationPreferences {
+  const now = new Date();
+
+  return {
+    id: randomUUID(),
+    userId,
+    emailNotifications: true,
+    pushNotifications: true,
+    inAppNotifications: true,
+    emailApplicationStatus: true,
+    emailNewMessage: true,
+    emailPayment: true,
+    emailOffer: true,
+    emailReview: true,
+    emailSystem: true,
+    pushApplicationStatus: true,
+    pushNewMessage: true,
+    pushPayment: true,
+    pushSubscription: null,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
 export interface IStorage {
   // Users
   getUser(id: string): Promise<User | undefined>;
@@ -767,26 +868,54 @@ export class DatabaseStorage implements IStorage {
 
   // Reviews
   async getReviewsByCompany(companyId: string): Promise<Review[]> {
-    return await db.select().from(reviews).where(eq(reviews.companyId, companyId)).orderBy(desc(reviews.createdAt));
+    try {
+      return await db
+        .select()
+        .from(reviews)
+        .where(eq(reviews.companyId, companyId))
+        .orderBy(desc(reviews.createdAt));
+    } catch (error) {
+      if (isMissingRelationError(error, "reviews")) {
+        console.warn("[Storage] reviews relation missing while fetching company reviews - returning empty array.");
+        return [];
+      }
+      throw error;
+    }
   }
 
   async createReview(review: InsertReview): Promise<Review> {
-    const result = await db.insert(reviews).values({
-      ...review,
-      id: randomUUID(),
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    }).returning();
-    return result[0];
+    try {
+      const result = await db.insert(reviews).values({
+        ...review,
+        id: randomUUID(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }).returning();
+      return result[0];
+    } catch (error) {
+      if (isMissingRelationError(error, "reviews")) {
+        console.warn("[Storage] reviews relation missing while creating review - returning ephemeral review.");
+        return buildEphemeralReview(review);
+      }
+      throw error;
+    }
   }
 
   async updateReview(id: string, updates: Partial<InsertReview>): Promise<Review | undefined> {
-    const result = await db
-      .update(reviews)
-      .set({ ...updates, isEdited: true, updatedAt: new Date() })
-      .where(eq(reviews.id, id))
-      .returning();
-    return result[0];
+    try {
+      const result = await db
+        .update(reviews)
+        .set({ ...updates, isEdited: true, updatedAt: new Date() })
+        .where(eq(reviews.id, id))
+        .returning();
+      return result[0];
+    } catch (error) {
+      if (isMissingRelationError(error, "reviews")) {
+        console.warn("[Storage] reviews relation missing while updating review - treating as no-op.");
+        return undefined;
+      }
+      throw error;
+    }
   }
 
   async getAllReviews(): Promise<Review[]> {
@@ -802,43 +931,75 @@ export class DatabaseStorage implements IStorage {
   }
 
   async hideReview(id: string): Promise<Review | undefined> {
-    const result = await db
-      .update(reviews)
-      .set({ isHidden: true, updatedAt: new Date() })
-      .where(eq(reviews.id, id))
-      .returning();
-    return result[0];
+    try {
+      const result = await db
+        .update(reviews)
+        .set({ isHidden: true, updatedAt: new Date() })
+        .where(eq(reviews.id, id))
+        .returning();
+      return result[0];
+    } catch (error) {
+      if (isMissingRelationError(error, "reviews")) {
+        console.warn("[Storage] reviews relation missing while hiding review - treating as no-op.");
+        return undefined;
+      }
+      throw error;
+    }
   }
 
   async deleteReview(id: string): Promise<void> {
-    await db.delete(reviews).where(eq(reviews.id, id));
+    try {
+      await db.delete(reviews).where(eq(reviews.id, id));
+    } catch (error) {
+      if (isMissingRelationError(error, "reviews")) {
+        console.warn("[Storage] reviews relation missing while deleting review - skipping operation.");
+        return;
+      }
+      throw error;
+    }
   }
 
   async updateAdminNote(id: string, note: string, adminId: string): Promise<Review | undefined> {
-    const result = await db
-      .update(reviews)
-      .set({ 
-        adminNote: note,
-        updatedAt: new Date() 
-      })
-      .where(eq(reviews.id, id))
-      .returning();
-    return result[0];
+    try {
+      const result = await db
+        .update(reviews)
+        .set({
+          adminNote: note,
+          updatedAt: new Date()
+        })
+        .where(eq(reviews.id, id))
+        .returning();
+      return result[0];
+    } catch (error) {
+      if (isMissingRelationError(error, "reviews")) {
+        console.warn("[Storage] reviews relation missing while updating admin note - treating as no-op.");
+        return undefined;
+      }
+      throw error;
+    }
   }
 
   async approveReview(id: string, adminId: string): Promise<Review | undefined> {
-    const result = await db
-      .update(reviews)
-      .set({ 
-        isApproved: true, 
-        isHidden: false,
-        approvedBy: adminId, 
-        approvedAt: new Date(),
-        updatedAt: new Date() 
-      })
-      .where(eq(reviews.id, id))
-      .returning();
-    return result[0];
+    try {
+      const result = await db
+        .update(reviews)
+        .set({
+          isApproved: true,
+          isHidden: false,
+          approvedBy: adminId,
+          approvedAt: new Date(),
+          updatedAt: new Date()
+        })
+        .where(eq(reviews.id, id))
+        .returning();
+      return result[0];
+    } catch (error) {
+      if (isMissingRelationError(error, "reviews")) {
+        console.warn("[Storage] reviews relation missing while approving review - treating as no-op.");
+        return undefined;
+      }
+      throw error;
+    }
   }
 
   // Favorites
@@ -1518,12 +1679,20 @@ export class DatabaseStorage implements IStorage {
 
   // Notifications
   async createNotification(notification: InsertNotification): Promise<Notification> {
-    const result = await db.insert(notifications).values({
-      ...notification,
-      id: randomUUID(),
-      createdAt: new Date(),
-    }).returning();
-    return result[0];
+    try {
+      const result = await db.insert(notifications).values({
+        ...notification,
+        id: randomUUID(),
+        createdAt: new Date(),
+      }).returning();
+      return result[0];
+    } catch (error) {
+      if (isMissingRelationError(error, "notifications")) {
+        console.warn("[Storage] notifications relation missing while creating notification - returning ephemeral notification.");
+        return buildEphemeralNotification(notification);
+      }
+      throw error;
+    }
   }
 
   async getNotifications(userId: string, limit: number = 50): Promise<Notification[]> {
@@ -1652,22 +1821,46 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createUserNotificationPreferences(preferences: InsertUserNotificationPreferences): Promise<UserNotificationPreferences> {
-    const result = await db.insert(userNotificationPreferences).values({
-      ...preferences,
-      id: randomUUID(),
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    }).returning();
-    return result[0];
+    try {
+      const result = await db.insert(userNotificationPreferences).values({
+        ...preferences,
+        id: randomUUID(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }).returning();
+      return result[0];
+    } catch (error) {
+      if (isMissingRelationError(error, "user_notification_preferences")) {
+        console.warn("[Storage] user_notification_preferences relation missing while creating preferences - returning defaults.");
+        return {
+          ...buildDefaultNotificationPreferences(preferences.userId),
+          ...preferences,
+        };
+      }
+      throw error;
+    }
   }
 
   async updateUserNotificationPreferences(userId: string, updates: Partial<InsertUserNotificationPreferences>): Promise<UserNotificationPreferences | undefined> {
-    const result = await db
-      .update(userNotificationPreferences)
-      .set({ ...updates, updatedAt: new Date() })
-      .where(eq(userNotificationPreferences.userId, userId))
-      .returning();
-    return result[0];
+    try {
+      const result = await db
+        .update(userNotificationPreferences)
+        .set({ ...updates, updatedAt: new Date() })
+        .where(eq(userNotificationPreferences.userId, userId))
+        .returning();
+      return result[0];
+    } catch (error) {
+      if (isMissingRelationError(error, "user_notification_preferences")) {
+        console.warn("[Storage] user_notification_preferences relation missing while updating preferences - returning merged defaults.");
+        return {
+          ...buildDefaultNotificationPreferences(userId),
+          ...updates,
+          userId,
+          updatedAt: new Date(),
+        } as UserNotificationPreferences;
+      }
+      throw error;
+    }
   }
 
   // Helper methods
