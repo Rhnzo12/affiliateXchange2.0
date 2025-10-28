@@ -546,6 +546,38 @@ export const retainerDeliverablesRelations = relations(retainerDeliverables, ({ 
   }),
 }));
 
+export const retainerPayments = pgTable("retainer_payments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  contractId: varchar("contract_id").notNull().references(() => retainerContracts.id, { onDelete: 'cascade' }),
+  deliverableId: varchar("deliverable_id").notNull().references(() => retainerDeliverables.id, { onDelete: 'cascade' }),
+  creatorId: varchar("creator_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  companyId: varchar("company_id").notNull().references(() => companyProfiles.id, { onDelete: 'cascade' }),
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  status: paymentStatusEnum("status").notNull().default('pending'),
+  description: text("description"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const retainerPaymentsRelations = relations(retainerPayments, ({ one }) => ({
+  contract: one(retainerContracts, {
+    fields: [retainerPayments.contractId],
+    references: [retainerContracts.id],
+  }),
+  deliverable: one(retainerDeliverables, {
+    fields: [retainerPayments.deliverableId],
+    references: [retainerDeliverables.id],
+  }),
+  creator: one(users, {
+    fields: [retainerPayments.creatorId],
+    references: [users.id],
+  }),
+  company: one(companyProfiles, {
+    fields: [retainerPayments.companyId],
+    references: [companyProfiles.id],
+  }),
+}));
+
 // System Settings
 export const systemSettings = pgTable("system_settings", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -638,6 +670,7 @@ export const insertRetainerContractSchema = createInsertSchema(retainerContracts
 export const createRetainerContractSchema = createInsertSchema(retainerContracts).omit({ id: true, companyId: true, createdAt: true, updatedAt: true, assignedCreatorId: true, startDate: true, endDate: true, status: true });
 export const insertRetainerApplicationSchema = createInsertSchema(retainerApplications).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertRetainerDeliverableSchema = createInsertSchema(retainerDeliverables).omit({ id: true, createdAt: true, submittedAt: true, reviewedAt: true });
+export const insertRetainerPaymentSchema = createInsertSchema(retainerPayments).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertNotificationSchema = createInsertSchema(notifications).omit({ id: true, createdAt: true, readAt: true });
 export const insertUserNotificationPreferencesSchema = createInsertSchema(userNotificationPreferences).omit({ id: true, createdAt: true, updatedAt: true });
 
@@ -673,6 +706,8 @@ export type RetainerApplication = typeof retainerApplications.$inferSelect;
 export type InsertRetainerApplication = z.infer<typeof insertRetainerApplicationSchema>;
 export type RetainerDeliverable = typeof retainerDeliverables.$inferSelect;
 export type InsertRetainerDeliverable = z.infer<typeof insertRetainerDeliverableSchema>;
+export type RetainerPayment = typeof retainerPayments.$inferSelect;
+export type InsertRetainerPayment = z.infer<typeof insertRetainerPaymentSchema>;
 export type Notification = typeof notifications.$inferSelect;
 export type InsertNotification = z.infer<typeof insertNotificationSchema>;
 export type UserNotificationPreferences = typeof userNotificationPreferences.$inferSelect;

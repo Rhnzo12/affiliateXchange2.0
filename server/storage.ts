@@ -18,6 +18,7 @@ import {
   clickEvents,
   paymentSettings,
   payments,
+  retainerPayments,
   retainerContracts,
   retainerApplications,
   retainerDeliverables,
@@ -47,6 +48,8 @@ import {
   type InsertPaymentSetting,
   type Payment,
   type InsertPayment,
+  type RetainerPayment,
+  type InsertRetainerPayment,
   type RetainerContract,
   type InsertRetainerContract,
   type RetainerApplication,
@@ -682,6 +685,7 @@ export interface IStorage {
   approveRetainerDeliverable(id: string, reviewNotes?: string): Promise<any>;
   rejectRetainerDeliverable(id: string, reviewNotes: string): Promise<any>;
   requestRevision(id: string, reviewNotes: string): Promise<any>;
+  createRetainerPayment(payment: InsertRetainerPayment): Promise<RetainerPayment>;
 
   // Notifications
   createNotification(notification: InsertNotification): Promise<Notification>;
@@ -2211,6 +2215,34 @@ export class DatabaseStorage implements IStorage {
       .where(eq(retainerDeliverables.id, id))
       .returning();
     return result[0];
+  }
+
+  async createRetainerPayment(payment: InsertRetainerPayment): Promise<RetainerPayment> {
+    try {
+      const result = await db
+        .insert(retainerPayments)
+        .values({
+          ...payment,
+          id: randomUUID(),
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .returning();
+      return result[0];
+    } catch (error) {
+      if (isMissingRelationError(error, "retainer_payments")) {
+        console.warn(
+          "[Storage] retainer_payments relation missing while creating retainer payment - treating as no-op.",
+        );
+        return {
+          ...payment,
+          id: randomUUID(),
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        } as RetainerPayment;
+      }
+      throw error;
+    }
   }
 
   // Notifications

@@ -1435,13 +1435,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const paymentPerVideo = monthlyAmount / videosPerMonth;
 
       // Create payment for the approved deliverable
-      await storage.createPayment({
+      await storage.createRetainerPayment({
+        contractId: contract.id,
+        deliverableId: deliverable.id,
         creatorId: deliverable.creatorId,
-        offerId: null, // Retainer payments don't have an offer ID
-        applicationId: null,
+        companyId: contract.companyId,
         amount: paymentPerVideo.toFixed(2),
         status: 'pending',
-        paymentType: 'retainer',
         description: `Retainer payment for ${contract.title} - Month ${deliverable.monthNumber}, Video ${deliverable.videoNumber}`,
       });
 
