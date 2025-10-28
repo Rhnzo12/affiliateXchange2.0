@@ -2,7 +2,7 @@
 
 ## Overview
 
-CreatorLink is a multi-sided marketplace platform connecting video content creators with brands for affiliate marketing opportunities. The platform enables creators to discover and apply for affiliate offers, track their performance, and earn commissions, while companies can list offers, manage creator partnerships, and monitor campaign results. The application features role-based dashboards for creators, companies, and administrators.
+CreatorLink is a multi-sided marketplace platform connecting video content creators with brands for affiliate marketing opportunities. It enables creators to discover offers, track performance, and earn commissions, while companies can list offers, manage partnerships, and monitor campaigns. The platform features role-based dashboards for creators, companies, and administrators, aiming to streamline affiliate marketing for video content.
 
 ## User Preferences
 
@@ -12,186 +12,66 @@ Preferred communication style: Simple, everyday language.
 
 ### Frontend Architecture
 
-**Framework**: React with TypeScript, using Vite as the build tool and development server.
-
-**UI Component System**: shadcn/ui (Radix UI primitives) with Tailwind CSS for styling. The design follows a "New York" style variant with comprehensive component coverage including forms, dialogs, data tables, and navigation elements.
-
-**Routing**: Wouter for client-side routing with role-based route protection. Different dashboard views are rendered based on user roles (creator, company, admin).
-
-**State Management**: 
-- TanStack Query (React Query) for server state management, data fetching, and caching
-- Local React state for UI-specific concerns
-- WebSocket connections for real-time messaging features
-
-**Design System**: Custom design tokens following inspiration from Airbnb (marketplace patterns), Linear (clean dashboards), Stripe (financial interfaces), and Instagram/TikTok (creator-focused elements). Uses HSL color system with comprehensive light/dark mode support.
+**Framework**: React with TypeScript, using Vite.
+**UI Component System**: shadcn/ui (Radix UI primitives) with Tailwind CSS, following a "New York" style variant.
+**Routing**: Wouter for client-side routing with role-based protection.
+**State Management**: TanStack Query for server state, local React state for UI, and WebSockets for real-time features.
+**Design System**: Custom design tokens inspired by Airbnb, Linear, Stripe, and Instagram/TikTok, using HSL color system with light/dark mode support.
 
 ### Backend Architecture
 
-**Server Framework**: Express.js with TypeScript running on Node.js.
-
-**API Design**: RESTful API endpoints with role-based middleware protection. Authentication required for most routes with specific role checks (creator, company, admin) where needed.
-
-**Authentication**: Custom username/password authentication using Passport Local Strategy with bcrypt password hashing. Sessions stored in PostgreSQL with express-session and connect-pg-simple. Users register with username, email, and password.
-
-**Real-time Communication**: WebSocket server integrated with HTTP server for real-time messaging between creators and companies.
-
-**File Upload**: Uppy integration for client-side file handling with AWS S3-compatible upload via Google Cloud Storage. Custom ACL (Access Control List) system for object-level permissions with owner, visibility, and group-based access rules.
+**Server Framework**: Express.js with TypeScript on Node.js.
+**API Design**: RESTful API with role-based middleware.
+**Authentication**: Custom username/password authentication using Passport Local Strategy with bcrypt. Sessions stored in PostgreSQL.
+**Real-time Communication**: WebSocket server integrated with HTTP for messaging.
 
 ### Database Architecture
 
-**Database**: PostgreSQL (via Neon serverless) with connection pooling.
+**Database**: PostgreSQL (Neon serverless) with connection pooling.
+**ORM**: Drizzle ORM for type-safe operations.
+**Schema Design**: Includes user management with role-based access, creator and company profiles, affiliate offers with various commission types, application tracking, a messaging system, reviews, favorites, detailed click event logging, and analytics. Key relationships connect users to profiles, offers to companies, and applications to creators and offers.
 
-**ORM**: Drizzle ORM for type-safe database operations and schema management.
+### System Design Choices
 
-**Schema Design**:
-- User system with role-based access (creator, company, admin)
-- Creator profiles with social media links, follower counts, and niche preferences
-- Company profiles with approval workflow (pending, approved, rejected)
-- Offers with multiple commission types (per_sale, per_lead, per_click, monthly_retainer, hybrid)
-- Offer videos for promotional content
-- Application system with auto-approval workflow and tracking links
-- Messaging system with conversations and real-time updates
-- Reviews and ratings for offers
-- Favorites/bookmarks for creators
-- Click events with comprehensive metadata (IP, geo-location, device, browser)
-- Analytics tracking for clicks, conversions, and earnings (aggregated from click events)
-- Payment settings for payout methods
+**File Upload & Storage**: Utilizes Uppy for client-side handling, with Cloudinary replacing Google Cloud Storage for media uploads (images, videos). Cloudinary provides optimization, transcoding, and secure delivery.
+**Notification System**: Comprehensive multi-channel delivery via Email (SendGrid), Web Push, and In-App notifications. Supports various notification types with user-granular preferences, real-time updates, and professional templating.
+**Click Tracking System**: Records detailed click events including IP, geo-location, device, and browser information for analytics and unique click calculations.
+**Authentication System**: Custom username/password authentication replaced Replit Auth, featuring secure credential verification, session-based auth, and role selection during registration.
 
-**Key Relationships**:
-- Users have one-to-one relationships with creator or company profiles
-- Offers belong to companies and can have many videos, applications, and reviews
-- Applications connect creators to offers with status tracking
-- Conversations facilitate messaging between creators and companies
-- Analytics track performance metrics per application
-
-### External Dependencies
+## External Dependencies
 
 **Authentication & Sessions**:
-- Passport Local Strategy - Username/password authentication
-- bcrypt - Password hashing (10 salt rounds)
-- Session management via PostgreSQL with 7-day cookie TTL
+- Passport Local Strategy
+- bcrypt
 
 **Database**:
-- Neon (PostgreSQL serverless) - Primary data storage
-- Drizzle Kit - Database migrations and schema management
+- Neon (PostgreSQL serverless)
+- Drizzle ORM (with Drizzle Kit for migrations)
 
 **File Storage**:
-- Google Cloud Storage - Object storage for media files (avatars, videos, promotional content)
-- Custom ACL implementation for access control
+- Cloudinary (for images and videos)
+- Uppy (file upload library)
 
 **UI Libraries**:
-- Radix UI - Accessible component primitives
-- Tailwind CSS - Utility-first styling
-- Recharts - Data visualization for analytics dashboards
-- Uppy - File upload handling
+- Radix UI
+- Tailwind CSS
+- Recharts (for data visualization)
+- Lucide React (icon system)
 
 **Development Tools**:
-- Vite - Frontend build tool and dev server
-- TypeScript - Type safety across frontend and backend
-- ESBuild - Backend bundling for production
+- Vite
+- TypeScript
+- ESBuild
 
-**WebSocket**:
-- ws library - Real-time bidirectional communication for messaging
+**Real-time Communication**:
+- ws (WebSocket library)
 
 **Geo-location**:
-- geoip-lite - IP-to-location lookup (MaxMind GeoLite2 database)
+- geoip-lite (IP-to-location lookup)
 
-**Design Assets**:
-- Google Fonts (Inter, JetBrains Mono) - Typography
-- Lucide React - Icon system
+**Notification Services**:
+- SendGrid (email notifications with HTML templates)
+- web-push (browser push notifications with VAPID authentication)
 
-## Recent Changes
-
-### Offer Video Upload System (Latest - October 2025)
-
-**Core Features:**
-- **6-12 Video Requirement**: Enforces minimum 6 videos and maximum 12 videos per offer
-- **Video Upload Interface**: Integrated Uppy file uploader with drag-and-drop and file browser
-- **Video Metadata**: Captures title (required), description, creator credit, and original platform (e.g., TikTok, Instagram)
-- **Object Storage Integration**: Videos uploaded to Google Cloud Storage with public ACL
-- **Video Management UI**: Grid display with video cards showing title, description, and delete buttons
-- **Real-time Validation**: UI shows video count (X of 12) and alerts when minimum requirement not met
-- **Authorization**: Only company that owns the offer can add/delete videos
-
-**Technical Implementation:**
-- **API Endpoints**: 
-  - GET /api/offers/:offerId/videos - Fetch all videos for an offer
-  - POST /api/offers/:offerId/videos - Upload and save video with metadata
-  - DELETE /api/offer-videos/:id - Delete a specific video
-- **Database Schema**: `offerVideos` table with fields: id, offerId, videoUrl (path), title, description, creatorCredit, originalPlatform, thumbnailUrl, orderIndex
-- **Storage**: Videos stored in object storage with only path saved in database
-- **UI Components**: Video upload dialog with form validation, video grid display, and count indicator
-- **Uppy Configuration**: Custom CSS handling due to Vite resolution - styles managed via component logic
-
-**User Flow:**
-1. Company creates/edits an offer and navigates to offer detail page
-2. System displays video count and alerts if less than 6 videos uploaded
-3. Company clicks "Add Video" button to open upload dialog
-4. Company uploads video file via Uppy interface
-5. Company fills in video metadata (title required)
-6. System saves video to object storage and creates database record
-7. Video appears in grid with option to delete
-8. Process repeats until 6-12 videos are uploaded
-
-### Admin Review Management Security Hardening (October 2025)
-
-**Security Improvements:**
-- **Input Validation**: Added Zod validation schemas (`adminReviewUpdateSchema`, `adminNoteSchema`) to prevent mass-assignment vulnerabilities
-- **Field Whitelisting**: Admin review updates only allow editing specific fields (reviewText, ratings) via `.pick()` schema
-- **Excluded Admin Fields**: `insertReviewSchema` explicitly omits admin-only fields (adminNote, isApproved, approvedBy, isHidden, etc.)
-- **Audit Trail Enhancement**: Added `adminNoteUpdatedBy` and `adminNoteUpdatedAt` to track who modified internal notes and when
-- **Server-Side Enforcement**: `isEdited` flag set automatically in storage layer, not via API to prevent client manipulation
-
-**Security Pattern:**
-All admin routes now follow the pattern: Zod validation → role check → storage operation with automatic audit tracking. This ensures only authorized fields can be modified and all admin actions are fully traceable.
-
-### Enhanced Real-Time Messaging System (October 2025)
-
-**UI/UX Improvements:**
-- **Typing Indicators**: Real-time typing status with 3-second timeout and animated bubble display
-- **Read Receipts**: Double-check marks show when messages are read, single check for sent
-- **Connection Status**: Live online/offline/reconnecting badge with auto-reconnect on disconnect
-- **Message Grouping**: Consecutive messages from same sender within 1 minute are grouped for cleaner UI
-- **Date Separators**: Smart date labels (Today, Yesterday, full dates) separate message sections
-- **Sound Notifications**: Optional notification sound for new messages with toggle in UI (persisted to localStorage)
-- **Better Timestamps**: Contextual time display (h:mm a for today, "Yesterday h:mm a", full date for older)
-- **Start Conversation**: Companies can initiate conversations with creators directly from applications page
-- **Auto-Read Tracking**: Messages automatically marked as read when viewing conversation
-- **Improved Empty States**: Helpful messages guide users when no conversations exist
-- **URL Deep Linking**: Direct conversation access via `/messages?conversation={id}` query parameter
-- **Message Creator Button**: Added to company applications page for quick communication
-
-**WebSocket Architecture (Production-Ready):**
-- **Persistent Single Connection**: WebSocket effect depends ONLY on `isAuthenticated` to prevent unnecessary reconnections on UI state changes (conversation switches, sound toggles)
-- **Ref-Based State Access**: Uses `selectedConversationRef` and `userIdRef` to avoid closure staleness in WebSocket handlers
-- **Robust Reconnection**: Per-effect `shouldReconnect` flag prevents old effect instances from reconnecting; auto-reconnects on unintentional disconnects with 3-second delay
-- **Handshake Failure Handling**: Socket assigned to `wsRef.current` immediately upon creation (not after `onopen`) so error/close handlers can identify and recover from handshake failures
-- **Identity Checks**: All handlers verify `socket === wsRef.current` before mutating state to prevent stale sockets from interfering
-- **Conversation-Aware Typing**: Typing indicators clear on conversation switch; both `user_typing` and `user_stop_typing` events check `conversationId` to ensure conversation-scoped behavior
-- **WebSocket Events**: Extended to handle `new_message`, `typing_start`, `typing_stop`, `mark_read`, and `messages_read` events
-
-### Custom Authentication System (October 2025)
-- **Replaced Replit Auth**: Migrated from OpenID Connect to custom username/password authentication
-- **User Schema Updates**: Added `username` (unique, required) and `password` (bcrypt hashed, required) fields to users table
-- **Login/Registration Pages**: Created dedicated `/login` and `/register` pages with form validation
-- **Passport Local Strategy**: Implemented secure credential verification with bcrypt.compare
-- **Session-based Auth**: HttpOnly cookies with PostgreSQL session store for security
-- **Auto-login on Registration**: Users automatically logged in after successful account creation
-- **Role Selection**: Users select Creator or Company role during registration
-- **Landing Page Updates**: "Get Started" button redirects to registration, "Sign In" to login
-
-### Click Tracking System (October 2025)
-- **Individual Click Storage**: Each click creates a `click_events` record with full metadata
-- **IP Normalization**: Properly extracts client IP from X-Forwarded-For header (handles proxy chains)
-- **Geo-location**: Real-time country/city lookup using geoip-lite (MaxMind GeoLite2)
-- **Device Detection**: Parses user agent to identify device type (mobile/tablet/desktop) and browser
-- **Unique Click Calculation**: Counts distinct normalized IP addresses per day for accurate analytics
-- **Tracking Endpoint**: `/track/:code` → logs metadata → redirects to product URL
-- **Metadata Captured**: IP address, country, city, user agent, device type, browser, referer, timestamp
-
-### Database Export & Migration Utilities (October 2025)
-- **Export Script**: `scripts/export-database.ts` exports all tables to timestamped JSON files
-- **Migration Guide**: `MIGRATION_GUIDE.md` provides step-by-step instructions for database portability
-- **SQL Dump Support**: Instructions for PostgreSQL pg_dump for large datasets
-- **External DB Setup**: Guides for Neon, Supabase, and local PostgreSQL setup
-- **Security Considerations**: Password hashes excluded from JSON export, environment variables documented
+**Typography**:
+- Google Fonts (Inter, JetBrains Mono)
