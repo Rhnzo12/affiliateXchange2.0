@@ -26,11 +26,15 @@ async function runMigration() {
 
     console.log(`📝 Found ${migrationFiles.length} migration file(s)\n`);
 
+    let totalStatements = 0;
+    let executedStatements = 0;
+    let skippedStatements = 0;
+
     for (const file of migrationFiles) {
       const filePath = join(migrationsDir, file);
-      const migrationSQL = readFileSync(filePath, 'utf-8').trim();
+      const migrationSQL = readFileSync(filePath, 'utf-8');
 
-      if (!migrationSQL) {
+      if (!migrationSQL.trim()) {
         console.log(`⚠️  Skipping empty migration file: ${file}`);
         continue;
       }
@@ -42,10 +46,16 @@ async function runMigration() {
         console.log('⚠️  Warning: This will truncate the analytics table and recreate click_events and messages tables');
       }
 
-      const statements = migrationSQL
-        .split(';')
+      const sanitizedSQL = migrationSQL
+        .replace(/--.*$/gm, '')
+        .trim();
+
+      const statements = sanitizedSQL
+        .split(/;\s*(?:\r?\n|$)/)
         .map(statement => statement.trim())
-        .filter(statement => statement.length > 0 && !statement.startsWith('--'));
+        .filter(statement => statement.length > 0);
+
+      totalStatements += statements.length;
 
       for (let i = 0; i < statements.length; i++) {
         const statement = statements[i];
@@ -53,15 +63,18 @@ async function runMigration() {
         try {
           await sql(statement);
           console.log(`  ✅ [${i + 1}/${statements.length}] Success`);
+          executedStatements++;
         } catch (error) {
           if (typeof error.message === 'string' && (
             error.message.includes('already exists') ||
             error.message.includes('does not exist')
           )) {
             console.log(`  ⚠️  [${i + 1}/${statements.length}] Skipped (already applied or missing dependency)`);
+            skippedStatements++;
           } else {
             console.error(`  ❌ [${i + 1}/${statements.length}] Error:`, error.message);
             console.log('  Statement preview:', statement.substring(0, 200) + (statement.length > 200 ? '...' : ''));
+            throw error;
           }
         }
       }
@@ -71,8 +84,12 @@ async function runMigration() {
 
     console.log('✅ Migration run complete!');
     console.log('\n📋 Summary:');
-    console.log('  - Analytics, click events, messages, and favorites schema fixes ensured');
-    console.log('  - Notifications tables and enums ensured');
+    console.log(`  - Files processed: ${migrationFiles.length}`);
+    console.log(`  - Statements executed: ${executedStatements}`);
+    console.log(`  - Statements skipped: ${skippedStatements}`);
+    if (totalStatements > executedStatements + skippedStatements) {
+      console.log(`  - Statements remaining: ${totalStatements - executedStatements - skippedStatements}`);
+    }
     console.log('\n🔄 Please restart your server for changes to take effect');
 
   } catch (error) {
