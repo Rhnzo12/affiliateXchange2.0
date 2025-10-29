@@ -80,6 +80,11 @@ export function AppSidebar() {
       url: "/favorites",
       icon: Heart,
     },
+    {
+      title: "Payment Management",
+      url: "/creator/payment-settings",
+      icon: DollarSign,
+    },
   ];
 
   const companyItems = [
@@ -128,6 +133,11 @@ export function AppSidebar() {
       url: "/company/reviews",
       icon: Star,
     },
+    {
+      title: "Payment Management",
+      url: "/company/payment-settings",
+      icon: DollarSign,
+    },
   ];
 
   const adminItems = [
@@ -155,6 +165,11 @@ export function AppSidebar() {
       title: "Review Management",
       url: "/admin/reviews",
       icon: Star,
+    },
+    {
+      title: "Payment Management",
+      url: "/admin/payment-settings",
+      icon: DollarSign,
     },
   ];
 
