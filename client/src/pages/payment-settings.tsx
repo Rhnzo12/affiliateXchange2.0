@@ -29,6 +29,7 @@ import {
   Users,
   XCircle,
 } from "lucide-react";
+import { users } from "@shared/schema";
 
 type PaymentStatus =
   | "pending"
@@ -265,7 +266,7 @@ function CreatorOverview({ payments }: CreatorOverviewProps) {
     return totals;
   }, [payments]);
 
-  const role: User["role"] = user.role;
+  const role: User["role"] = users.role;
 
   return (
     <div className="space-y-6">
