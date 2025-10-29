@@ -265,6 +265,8 @@ function CreatorOverview({ payments }: CreatorOverviewProps) {
     return totals;
   }, [payments]);
 
+  const role: User["role"] = user.role;
+
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">

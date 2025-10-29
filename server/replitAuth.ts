@@ -58,6 +58,8 @@ async function upsertAndLoadUser(claims: any) {
   const dbUser = await storage.upsertUser({
     id: claims["sub"],
     email: claims["email"],
+    username: claims["email"], // Use email as username for OAuth users
+    password: "", // OAuth users don't have passwords
     firstName: claims["first_name"],
     lastName: claims["last_name"],
     profileImageUrl: claims["profile_image_url"],
