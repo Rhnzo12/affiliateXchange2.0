@@ -29,48 +29,29 @@ import {
   Users,
   XCircle,
 } from "lucide-react";
-import { users } from "@shared/schema";
+
+import type { User } from "@shared/schema";
 
 type PaymentStatus =
   | "pending"
-  | "pending_approval"
-  | "scheduled"
-  | "approved"
+  | "processing"
   | "completed"
   | "failed"
-  | "disputed";
+  | "refunded";
 
 type CreatorPayment = {
   id: string;
-  offer: string;
-  company: string;
-  grossAmount: number;
-  platformFee: number;
-  processingFee: number;
-  netAmount: number;
+  offerId: string;
+  companyId: string;
+  grossAmount: string;
+  platformFeeAmount: string;
+  stripeFeeAmount: string;
+  netAmount: string;
   status: PaymentStatus;
-  method: string;
-  scheduledDate?: string;
-  completedDate?: string;
-  proof?: string;
-};
-
-type CompanyPayout = {
-  id: string;
-  creator: string;
-  offer: string;
-  grossAmount: number;
-  platformFee: number;
-  processingFee: number;
-  totalDue: number;
-  status: PaymentStatus;
-  proofSubmitted?: string;
-  workCompleted?: string;
-  scheduledDate?: string;
-  approvedDate?: string;
-  completedDate?: string;
-  disputeReason?: string;
-  proof?: string;
+  paymentMethod?: string;
+  description?: string;
+  completedAt?: string;
+  createdAt: string;
 };
 
 type PaymentMethod = {
@@ -94,139 +75,12 @@ type AdminFundingMethod = {
   isPrimary?: boolean;
 };
 
-const creatorPayments: CreatorPayment[] = [
-  {
-    id: "PAY-001",
-    offer: "FitApp Premium",
-    company: "FitTech Inc",
-    grossAmount: 500,
-    platformFee: 20,
-    processingFee: 15,
-    netAmount: 465,
-    status: "completed",
-    method: "E-transfer",
-    scheduledDate: "2025-10-25",
-    completedDate: "2025-10-25",
-    proof: "video_link_123.mp4",
-  },
-  {
-    id: "PAY-002",
-    offer: "BeautyBox Subscription",
-    company: "BeautyBox Co",
-    grossAmount: 750,
-    platformFee: 30,
-    processingFee: 22.5,
-    netAmount: 697.5,
-    status: "pending",
-    method: "PayPal",
-    scheduledDate: "2025-11-01",
-    proof: "video_link_456.mp4",
-  },
-  {
-    id: "PAY-003",
-    offer: "TechGadget Pro",
-    company: "TechGear LLC",
-    grossAmount: 1200,
-    platformFee: 48,
-    processingFee: 36,
-    netAmount: 1116,
-    status: "scheduled",
-    method: "Wire Transfer",
-    scheduledDate: "2025-11-05",
-  },
-];
-
-const companyPayouts: CompanyPayout[] = [
-  {
-    id: "POUT-001",
-    creator: "@fitnessJoe",
-    offer: "FitApp Premium",
-    grossAmount: 500,
-    platformFee: 20,
-    processingFee: 15,
-    totalDue: 535,
-    status: "pending_approval",
-    proofSubmitted: "2025-10-28",
-    workCompleted: "2025-10-27",
-    proof: "video_link_123.mp4",
-  },
-  {
-    id: "POUT-002",
-    creator: "@beautyQueen",
-    offer: "FitApp Premium",
-    grossAmount: 750,
-    platformFee: 30,
-    processingFee: 22.5,
-    totalDue: 802.5,
-    status: "approved",
-    scheduledDate: "2025-11-01",
-    workCompleted: "2025-10-25",
-    approvedDate: "2025-10-28",
-  },
-  {
-    id: "POUT-003",
-    creator: "@techReviewer",
-    offer: "FitApp Premium",
-    grossAmount: 1200,
-    platformFee: 48,
-    processingFee: 36,
-    totalDue: 1284,
-    status: "completed",
-    completedDate: "2025-10-20",
-    workCompleted: "2025-10-15",
-  },
-  {
-    id: "POUT-004",
-    creator: "@lifestyleVlog",
-    offer: "FitApp Premium",
-    grossAmount: 300,
-    platformFee: 12,
-    processingFee: 9,
-    totalDue: 321,
-    status: "disputed",
-    disputeReason: "Video quality concerns",
-    workCompleted: "2025-10-26",
-  },
-];
-
-const adminFundingMethods: AdminFundingMethod[] = [
-  {
-    id: 1,
-    name: "Primary Operating Account",
-    type: "bank",
-    last4: "4321",
-    status: "active",
-    isPrimary: true,
-  },
-  {
-    id: 2,
-    name: "Reserve Treasury Wallet",
-    type: "wallet",
-    last4: "9fae",
-    status: "active",
-  },
-  {
-    id: 3,
-    name: "Backup Settlement Card",
-    type: "card",
-    last4: "7788",
-    status: "pending",
-  },
-];
-
 const statusConfig: Record<PaymentStatus, { bg: string; text: string; icon: typeof Clock; label: string }> = {
   pending: { bg: "bg-yellow-100", text: "text-yellow-800", icon: Clock, label: "Pending" },
-  pending_approval: {
-    bg: "bg-yellow-100",
-    text: "text-yellow-800",
-    icon: Clock,
-    label: "Pending Approval",
-  },
-  scheduled: { bg: "bg-blue-100", text: "text-blue-800", icon: Clock, label: "Scheduled" },
-  approved: { bg: "bg-green-100", text: "text-green-800", icon: CheckCircle, label: "Approved" },
+  processing: { bg: "bg-blue-100", text: "text-blue-800", icon: Clock, label: "Processing" },
   completed: { bg: "bg-green-100", text: "text-green-800", icon: CheckCircle, label: "Completed" },
   failed: { bg: "bg-red-100", text: "text-red-800", icon: XCircle, label: "Failed" },
-  disputed: { bg: "bg-red-100", text: "text-red-800", icon: AlertTriangle, label: "Disputed" },
+  refunded: { bg: "bg-gray-100", text: "text-gray-800", icon: AlertTriangle, label: "Refunded" },
 };
 
 function StatusBadge({ status }: { status: PaymentStatus }) {
@@ -242,197 +96,16 @@ function StatusBadge({ status }: { status: PaymentStatus }) {
   );
 }
 
-type CreatorOverviewProps = {
-  payments: CreatorPayment[];
-};
-
-function CreatorOverview({ payments }: CreatorOverviewProps) {
+function CreatorOverview({ payments }: { payments: CreatorPayment[] }) {
   const { totalEarnings, pendingEarnings, completedEarnings } = useMemo(() => {
     const totals = payments.reduce(
       (acc, payment) => {
-        const amount = payment.netAmount;
+        const amount = parseFloat(payment.netAmount);
         acc.totalEarnings += amount;
         if (payment.status === "completed") {
           acc.completedEarnings += amount;
         }
-        if (payment.status === "pending" || payment.status === "scheduled") {
-          acc.pendingEarnings += amount;
-        }
-        return acc;
-      },
-      { totalEarnings: 0, pendingEarnings: 0, completedEarnings: 0 }
-    );
-
-    return totals;
-  }, [payments]);
-
-  const role: User["role"] = users.role;
-
-  return "creator";
-}
-
-const creatorPayments: CreatorPayment[] = [
-  {
-    id: "PAY-001",
-    offer: "FitApp Premium",
-    company: "FitTech Inc",
-    grossAmount: 500,
-    platformFee: 20,
-    processingFee: 15,
-    netAmount: 465,
-    status: "completed",
-    method: "E-transfer",
-    scheduledDate: "2025-10-25",
-    completedDate: "2025-10-25",
-    proof: "video_link_123.mp4",
-  },
-  {
-    id: "PAY-002",
-    offer: "BeautyBox Subscription",
-    company: "BeautyBox Co",
-    grossAmount: 750,
-    platformFee: 30,
-    processingFee: 22.5,
-    netAmount: 697.5,
-    status: "pending",
-    method: "PayPal",
-    scheduledDate: "2025-11-01",
-    proof: "video_link_456.mp4",
-  },
-  {
-    id: "PAY-003",
-    offer: "TechGadget Pro",
-    company: "TechGear LLC",
-    grossAmount: 1200,
-    platformFee: 48,
-    processingFee: 36,
-    netAmount: 1116,
-    status: "scheduled",
-    method: "Wire Transfer",
-    scheduledDate: "2025-11-05",
-  },
-];
-
-const companyPayouts: CompanyPayout[] = [
-  {
-    id: "POUT-001",
-    creator: "@fitnessJoe",
-    offer: "FitApp Premium",
-    grossAmount: 500,
-    platformFee: 20,
-    processingFee: 15,
-    totalDue: 535,
-    status: "pending_approval",
-    proofSubmitted: "2025-10-28",
-    workCompleted: "2025-10-27",
-    proof: "video_link_123.mp4",
-  },
-  {
-    id: "POUT-002",
-    creator: "@beautyQueen",
-    offer: "FitApp Premium",
-    grossAmount: 750,
-    platformFee: 30,
-    processingFee: 22.5,
-    totalDue: 802.5,
-    status: "approved",
-    scheduledDate: "2025-11-01",
-    workCompleted: "2025-10-25",
-    approvedDate: "2025-10-28",
-  },
-  {
-    id: "POUT-003",
-    creator: "@techReviewer",
-    offer: "FitApp Premium",
-    grossAmount: 1200,
-    platformFee: 48,
-    processingFee: 36,
-    totalDue: 1284,
-    status: "completed",
-    completedDate: "2025-10-20",
-    workCompleted: "2025-10-15",
-  },
-  {
-    id: "POUT-004",
-    creator: "@lifestyleVlog",
-    offer: "FitApp Premium",
-    grossAmount: 300,
-    platformFee: 12,
-    processingFee: 9,
-    totalDue: 321,
-    status: "disputed",
-    disputeReason: "Video quality concerns",
-    workCompleted: "2025-10-26",
-  },
-];
-
-const adminFundingMethods: AdminFundingMethod[] = [
-  {
-    id: 1,
-    name: "Primary Operating Account",
-    type: "bank",
-    last4: "4321",
-    status: "active",
-    isPrimary: true,
-  },
-  {
-    id: 2,
-    name: "Reserve Treasury Wallet",
-    type: "wallet",
-    last4: "9fae",
-    status: "active",
-  },
-  {
-    id: 3,
-    name: "Backup Settlement Card",
-    type: "card",
-    last4: "7788",
-    status: "pending",
-  },
-];
-
-const statusConfig: Record<PaymentStatus, { bg: string; text: string; icon: typeof Clock; label: string }> = {
-  pending: { bg: "bg-yellow-100", text: "text-yellow-800", icon: Clock, label: "Pending" },
-  pending_approval: {
-    bg: "bg-yellow-100",
-    text: "text-yellow-800",
-    icon: Clock,
-    label: "Pending Approval",
-  },
-  scheduled: { bg: "bg-blue-100", text: "text-blue-800", icon: Clock, label: "Scheduled" },
-  approved: { bg: "bg-green-100", text: "text-green-800", icon: CheckCircle, label: "Approved" },
-  completed: { bg: "bg-green-100", text: "text-green-800", icon: CheckCircle, label: "Completed" },
-  failed: { bg: "bg-red-100", text: "text-red-800", icon: XCircle, label: "Failed" },
-  disputed: { bg: "bg-red-100", text: "text-red-800", icon: AlertTriangle, label: "Disputed" },
-};
-
-function StatusBadge({ status }: { status: PaymentStatus }) {
-  const config = statusConfig[status];
-  const Icon = config.icon;
-  return (
-    <span
-      className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium ${config.bg} ${config.text}`}
-    >
-      <Icon className="w-3 h-3" />
-      {config.label}
-    </span>
-  );
-}
-
-type CreatorOverviewProps = {
-  payments: CreatorPayment[];
-};
-
-function CreatorOverview({ payments }: CreatorOverviewProps) {
-  const { totalEarnings, pendingEarnings, completedEarnings } = useMemo(() => {
-    const totals = payments.reduce(
-      (acc, payment) => {
-        const amount = payment.netAmount;
-        acc.totalEarnings += amount;
-        if (payment.status === "completed") {
-          acc.completedEarnings += amount;
-        }
-        if (payment.status === "pending" || payment.status === "scheduled") {
+        if (payment.status === "pending" || payment.status === "processing") {
           acc.pendingEarnings += amount;
         }
         return acc;
@@ -476,90 +149,88 @@ function CreatorOverview({ payments }: CreatorOverviewProps) {
 
       <div className="overflow-hidden rounded-xl border-2 border-gray-200 bg-white">
         <div className="border-b border-gray-200 p-6">
-          <h3 className="text-lg font-bold text-gray-900">Payment History</h3>
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-bold text-gray-900">Payment History</h3>
+            <Button variant="outline" size="sm">
+              <Download className="mr-2 h-4 w-4" />
+              Export
+            </Button>
+          </div>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                  ID
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                  Offer
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                  Company
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                  Gross
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                  Platform Fee (4%)
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                  Processing (3%)
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                  Net Amount
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                  Status
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                  Date
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200 bg-white">
-              {payments.map((payment) => (
-                <tr key={payment.id} className="transition hover:bg-gray-50">
-                  <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900">{payment.id}</td>
-                  <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-900">{payment.offer}</td>
-                  <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-600">{payment.company}</td>
-                  <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900">
-                    ${payment.grossAmount}
-                  </td>
-                  <td className="whitespace-nowrap px-6 py-4 text-sm text-red-600">-${payment.platformFee}</td>
-                  <td className="whitespace-nowrap px-6 py-4 text-sm text-red-600">-${payment.processingFee}</td>
-                  <td className="whitespace-nowrap px-6 py-4 text-sm font-bold text-green-600">
-                    ${payment.netAmount}
-                  </td>
-                  <td className="whitespace-nowrap px-6 py-4">
-                    <StatusBadge status={payment.status} />
-                  </td>
-                  <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-600">
-                    {payment.completedDate || payment.scheduledDate}
-                  </td>
+          {payments.length === 0 ? (
+            <div className="py-12 text-center">
+              <p className="text-gray-500">No payment history yet</p>
+            </div>
+          ) : (
+            <table className="w-full">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                    ID
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                    Description
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                    Gross
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                    Platform Fee (4%)
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                    Processing (3%)
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                    Net Amount
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                    Status
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                    Date
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-gray-200 bg-white">
+                {payments.map((payment) => (
+                  <tr key={payment.id} className="transition hover:bg-gray-50">
+                    <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900">
+                      {payment.id.slice(0, 8)}...
+                    </td>
+                    <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-900">
+                      {payment.description || "Payment"}
+                    </td>
+                    <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900">
+                      ${parseFloat(payment.grossAmount).toFixed(2)}
+                    </td>
+                    <td className="whitespace-nowrap px-6 py-4 text-sm text-red-600">
+                      -${parseFloat(payment.platformFeeAmount).toFixed(2)}
+                    </td>
+                    <td className="whitespace-nowrap px-6 py-4 text-sm text-red-600">
+                      -${parseFloat(payment.stripeFeeAmount).toFixed(2)}
+                    </td>
+                    <td className="whitespace-nowrap px-6 py-4 text-sm font-bold text-green-600">
+                      ${parseFloat(payment.netAmount).toFixed(2)}
+                    </td>
+                    <td className="whitespace-nowrap px-6 py-4">
+                      <StatusBadge status={payment.status} />
+                    </td>
+                    <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-600">
+                      {payment.completedAt
+                        ? new Date(payment.completedAt).toLocaleDateString()
+                        : new Date(payment.createdAt).toLocaleDateString()}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
       </div>
     </div>
   );
 }
-
-type CreatorPaymentSettingsProps = {
-  paymentMethods?: PaymentMethod[];
-  payoutMethod: string;
-  setPayoutMethod: (method: string) => void;
-  payoutEmail: string;
-  setPayoutEmail: (value: string) => void;
-  bankRoutingNumber: string;
-  setBankRoutingNumber: (value: string) => void;
-  bankAccountNumber: string;
-  setBankAccountNumber: (value: string) => void;
-  paypalEmail: string;
-  setPaypalEmail: (value: string) => void;
-  cryptoWalletAddress: string;
-  setCryptoWalletAddress: (value: string) => void;
-  cryptoNetwork: string;
-  setCryptoNetwork: (value: string) => void;
-  onAddPaymentMethod: () => void;
-  isSubmitting: boolean;
-};
 
 function CreatorPaymentSettings({
   paymentMethods,
@@ -579,7 +250,25 @@ function CreatorPaymentSettings({
   setCryptoNetwork,
   onAddPaymentMethod,
   isSubmitting,
-}: CreatorPaymentSettingsProps) {
+}: {
+  paymentMethods?: PaymentMethod[];
+  payoutMethod: string;
+  setPayoutMethod: (method: string) => void;
+  payoutEmail: string;
+  setPayoutEmail: (value: string) => void;
+  bankRoutingNumber: string;
+  setBankRoutingNumber: (value: string) => void;
+  bankAccountNumber: string;
+  setBankAccountNumber: (value: string) => void;
+  paypalEmail: string;
+  setPaypalEmail: (value: string) => void;
+  cryptoWalletAddress: string;
+  setCryptoWalletAddress: (value: string) => void;
+  cryptoNetwork: string;
+  setCryptoNetwork: (value: string) => void;
+  onAddPaymentMethod: () => void;
+  isSubmitting: boolean;
+}) {
   const isAddDisabled =
     isSubmitting ||
     (payoutMethod === "etransfer" && !payoutEmail) ||
@@ -588,18 +277,10 @@ function CreatorPaymentSettings({
     (payoutMethod === "crypto" && (!cryptoWalletAddress || !cryptoNetwork));
 
   const getDisplayValue = (method: PaymentMethod) => {
-    if (method.payoutMethod === "etransfer") {
-      return method.payoutEmail;
-    }
-    if (method.payoutMethod === "wire") {
-      return method.bankAccountNumber;
-    }
-    if (method.payoutMethod === "paypal") {
-      return method.paypalEmail;
-    }
-    if (method.payoutMethod === "crypto") {
-      return method.cryptoWalletAddress;
-    }
+    if (method.payoutMethod === "etransfer") return method.payoutEmail;
+    if (method.payoutMethod === "wire") return `****${method.bankAccountNumber?.slice(-4)}`;
+    if (method.payoutMethod === "paypal") return method.paypalEmail;
+    if (method.payoutMethod === "crypto") return `${method.cryptoWalletAddress?.slice(0, 6)}...`;
     return undefined;
   };
 
@@ -609,9 +290,9 @@ function CreatorPaymentSettings({
         <h3 className="text-lg font-bold text-gray-900">Payment Methods</h3>
         {!paymentMethods || paymentMethods.length === 0 ? (
           <div className="mt-6 text-center">
-            <DollarSign className="mx-auto mb-4 h-12 w-12 text-muted-foreground/50" />
-            <p className="text-muted-foreground">No payment methods yet</p>
-            <p className="mt-1 text-sm text-muted-foreground">Add a payment method to receive payouts</p>
+            <DollarSign className="mx-auto mb-4 h-12 w-12 text-gray-400" />
+            <p className="text-gray-600">No payment methods yet</p>
+            <p className="mt-1 text-sm text-gray-500">Add a payment method to receive payouts</p>
           </div>
         ) : (
           <div className="mt-6 space-y-4">
@@ -631,9 +312,6 @@ function CreatorPaymentSettings({
                 </div>
                 <div className="flex items-center gap-2">
                   {method.isDefault && <Badge>Default</Badge>}
-                  <Button variant="ghost" size="sm">
-                    Edit
-                  </Button>
                 </div>
               </div>
             ))}
@@ -647,7 +325,7 @@ function CreatorPaymentSettings({
           <div className="space-y-2">
             <Label htmlFor="method">Payout Method</Label>
             <Select value={payoutMethod} onValueChange={setPayoutMethod}>
-              <SelectTrigger id="method" data-testid="select-payout-method">
+              <SelectTrigger id="method">
                 <SelectValue placeholder="Select method" />
               </SelectTrigger>
               <SelectContent>
@@ -668,7 +346,6 @@ function CreatorPaymentSettings({
                 placeholder="your@email.com"
                 value={payoutEmail}
                 onChange={(e) => setPayoutEmail(e.target.value)}
-                data-testid="input-payout-email"
               />
             </div>
           )}
@@ -682,7 +359,6 @@ function CreatorPaymentSettings({
                   placeholder="123456789"
                   value={bankRoutingNumber}
                   onChange={(e) => setBankRoutingNumber(e.target.value)}
-                  data-testid="input-routing-number"
                 />
               </div>
               <div className="space-y-2">
@@ -692,7 +368,6 @@ function CreatorPaymentSettings({
                   placeholder="123456789012"
                   value={bankAccountNumber}
                   onChange={(e) => setBankAccountNumber(e.target.value)}
-                  data-testid="input-account-number"
                 />
               </div>
             </>
@@ -707,7 +382,6 @@ function CreatorPaymentSettings({
                 placeholder="your@paypal.com"
                 value={paypalEmail}
                 onChange={(e) => setPaypalEmail(e.target.value)}
-                data-testid="input-paypal-email"
               />
             </div>
           )}
@@ -721,13 +395,12 @@ function CreatorPaymentSettings({
                   placeholder="0x..."
                   value={cryptoWalletAddress}
                   onChange={(e) => setCryptoWalletAddress(e.target.value)}
-                  data-testid="input-crypto-wallet"
                 />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="network">Network</Label>
                 <Select value={cryptoNetwork} onValueChange={setCryptoNetwork}>
-                  <SelectTrigger id="network" data-testid="select-crypto-network">
+                  <SelectTrigger id="network">
                     <SelectValue placeholder="Select network" />
                   </SelectTrigger>
                   <SelectContent>
@@ -745,8 +418,7 @@ function CreatorPaymentSettings({
           <Button
             onClick={onAddPaymentMethod}
             disabled={isAddDisabled}
-            className="gap-2"
-            data-testid="button-add-payment"
+            className="w-full"
           >
             {isSubmitting ? "Adding..." : "Add Payment Method"}
           </Button>
@@ -774,85 +446,87 @@ function CreatorPaymentSettings({
   );
 }
 
-type CompanyPayoutApprovalProps = {
-  payouts: CompanyPayout[];
-};
-
-function CompanyPayoutApproval({ payouts }: CompanyPayoutApprovalProps) {
-  const pendingApprovals = useMemo(
-    () => payouts.filter((payout) => payout.status === "pending_approval"),
+function CompanyPayoutApproval({ payouts }: { payouts: CreatorPayment[] }) {
+  const pendingPayouts = useMemo(
+    () => payouts.filter((payout) => payout.status === "pending" || payout.status === "processing"),
     [payouts]
   );
 
-  const totalPendingAmount = pendingApprovals.reduce((sum, payout) => sum + payout.totalDue, 0);
+  const totalPendingAmount = pendingPayouts.reduce(
+    (sum, payout) => sum + parseFloat(payout.grossAmount),
+    0
+  );
 
   return (
     <div className="space-y-6">
-      <div className="rounded-xl border-2 border-yellow-200 bg-yellow-50 p-6">
-        <div className="mb-3 flex items-center gap-3">
-          <AlertTriangle className="h-6 w-6 text-yellow-600" />
-          <h3 className="text-lg font-bold text-yellow-900">Pending Approvals</h3>
+      {pendingPayouts.length > 0 && (
+        <div className="rounded-xl border-2 border-yellow-200 bg-yellow-50 p-6">
+          <div className="mb-3 flex items-center gap-3">
+            <AlertTriangle className="h-6 w-6 text-yellow-600" />
+            <h3 className="text-lg font-bold text-yellow-900">Pending Approvals</h3>
+          </div>
+          <p className="text-yellow-800">
+            You have {pendingPayouts.length} payout{pendingPayouts.length !== 1 ? "s" : ""} pending approval
+            totaling ${totalPendingAmount.toFixed(2)}
+          </p>
         </div>
-        <p className="text-yellow-800">
-          You have {pendingApprovals.length} payout{pendingApprovals.length !== 1 ? "s" : ""} pending approval totaling
-          ${totalPendingAmount.toFixed(2)}
-        </p>
-      </div>
+      )}
 
       <div className="overflow-hidden rounded-xl border-2 border-gray-200 bg-white">
         <div className="border-b border-gray-200 p-6">
           <h3 className="text-lg font-bold text-gray-900">Payout Requests</h3>
         </div>
         <div className="divide-y divide-gray-200">
-          {payouts.map((payout) => (
-            <div key={payout.id} className="p-6 transition hover:bg-gray-50">
-              <div className="mb-4 flex items-start justify-between">
-                <div>
-                  <div className="mb-2 flex items-center gap-3">
-                    <h4 className="font-bold text-gray-900">{payout.creator}</h4>
-                    <StatusBadge status={payout.status} />
-                  </div>
-                  <p className="text-sm text-gray-600">{payout.offer}</p>
-                  {payout.workCompleted && (
-                    <p className="mt-1 text-xs text-gray-500">Work completed: {payout.workCompleted}</p>
-                  )}
-                </div>
-                <div className="text-right">
-                  <div className="text-2xl font-bold text-gray-900">${payout.totalDue.toFixed(2)}</div>
-                  <div className="text-xs text-gray-500">Total due</div>
-                </div>
-              </div>
-
-              <div className="mb-4 rounded-lg bg-gray-50 p-4">
-                <div className="grid grid-cols-1 gap-4 text-sm md:grid-cols-3">
+          {pendingPayouts.length === 0 ? (
+            <div className="py-12 text-center">
+              <p className="text-gray-500">No pending approvals</p>
+            </div>
+          ) : (
+            pendingPayouts.map((payout) => (
+              <div key={payout.id} className="p-6 transition hover:bg-gray-50">
+                <div className="mb-4 flex items-start justify-between">
                   <div>
-                    <div className="mb-1 text-gray-600">Creator Payment</div>
-                    <div className="font-medium text-gray-900">${payout.grossAmount}</div>
+                    <div className="mb-2 flex items-center gap-3">
+                      <h4 className="font-bold text-gray-900">
+                        {payout.description || `Payment ${payout.id.slice(0, 8)}`}
+                      </h4>
+                      <StatusBadge status={payout.status} />
+                    </div>
+                    <p className="text-sm text-gray-600">
+                      Created: {new Date(payout.createdAt).toLocaleDateString()}
+                    </p>
                   </div>
-                  <div>
-                    <div className="mb-1 text-gray-600">Platform Fee (4%)</div>
-                    <div className="font-medium text-gray-900">${payout.platformFee}</div>
-                  </div>
-                  <div>
-                    <div className="mb-1 text-gray-600">Processing (3%)</div>
-                    <div className="font-medium text-gray-900">${payout.processingFee}</div>
+                  <div className="text-right">
+                    <div className="text-2xl font-bold text-gray-900">
+                      ${parseFloat(payout.grossAmount).toFixed(2)}
+                    </div>
+                    <div className="text-xs text-gray-500">Creator payment</div>
                   </div>
                 </div>
-              </div>
 
-              {payout.proof && (
-                <div className="mb-4">
-                  <a
-                    href="#"
-                    className="flex items-center gap-2 text-sm font-medium text-blue-600 hover:text-blue-700"
-                  >
-                    <Download className="h-4 w-4" />
-                    View Proof of Work
-                  </a>
+                <div className="mb-4 rounded-lg bg-gray-50 p-4">
+                  <div className="grid grid-cols-1 gap-4 text-sm md:grid-cols-3">
+                    <div>
+                      <div className="mb-1 text-gray-600">Creator Payment</div>
+                      <div className="font-medium text-gray-900">
+                        ${parseFloat(payout.grossAmount).toFixed(2)}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="mb-1 text-gray-600">Platform Fee (4%)</div>
+                      <div className="font-medium text-gray-900">
+                        ${parseFloat(payout.platformFeeAmount).toFixed(2)}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="mb-1 text-gray-600">Processing (3%)</div>
+                      <div className="font-medium text-gray-900">
+                        ${parseFloat(payout.stripeFeeAmount).toFixed(2)}
+                      </div>
+                    </div>
+                  </div>
                 </div>
-              )}
 
-              {payout.status === "pending_approval" && (
                 <div className="flex gap-3">
                   <Button className="flex-1 gap-2 bg-green-600 text-white hover:bg-green-700">
                     <CheckCircle className="h-4 w-4" />
@@ -863,36 +537,23 @@ function CompanyPayoutApproval({ payouts }: CompanyPayoutApprovalProps) {
                     Dispute
                   </Button>
                 </div>
-              )}
-
-              {payout.status === "disputed" && payout.disputeReason && (
-                <div className="rounded-lg border-2 border-red-200 bg-red-50 p-4">
-                  <div className="mb-2 flex items-center gap-2">
-                    <AlertTriangle className="h-4 w-4 text-red-600" />
-                    <span className="font-medium text-red-900">Dispute Reason:</span>
-                  </div>
-                  <p className="text-sm text-red-800">{payout.disputeReason}</p>
-                </div>
-              )}
-            </div>
-          ))}
+              </div>
+            ))
+          )}
         </div>
       </div>
     </div>
   );
 }
 
-type CompanyOverviewProps = {
-  payouts: CompanyPayout[];
-};
-
-function CompanyOverview({ payouts }: CompanyOverviewProps) {
+function CompanyOverview({ payouts }: { payouts: CreatorPayment[] }) {
   const totalPaid = payouts
-    .filter((payout) => payout.status === "completed")
-    .reduce((sum, payout) => sum + payout.totalDue, 0);
+    .filter((p) => p.status === "completed")
+    .reduce((sum, p) => sum + parseFloat(p.grossAmount), 0);
+
   const pendingAmount = payouts
-    .filter((payout) => payout.status === "pending_approval" || payout.status === "approved")
-    .reduce((sum, payout) => sum + payout.totalDue, 0);
+    .filter((p) => p.status === "pending" || p.status === "processing")
+    .reduce((sum, p) => sum + parseFloat(p.grossAmount), 0);
 
   return (
     <div className="space-y-6">
@@ -917,124 +578,110 @@ function CompanyOverview({ payouts }: CompanyOverviewProps) {
 
         <div className="rounded-xl border-2 border-gray-200 bg-white p-6">
           <div className="mb-2 flex items-center justify-between">
-            <span className="text-sm text-gray-600">Active Creators</span>
+            <span className="text-sm text-gray-600">Total Payments</span>
             <Users className="h-5 w-5 text-purple-500" />
           </div>
           <div className="text-3xl font-bold text-gray-900">{payouts.length}</div>
-          <div className="mt-1 text-xs text-gray-500">In your offers</div>
+          <div className="mt-1 text-xs text-gray-500">All transactions</div>
         </div>
       </div>
 
       <div className="overflow-hidden rounded-xl border-2 border-gray-200 bg-white">
         <div className="border-b border-gray-200 p-6">
-          <h3 className="text-lg font-bold text-gray-900">Payment History</h3>
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-bold text-gray-900">Payment History</h3>
+            <Button variant="outline" size="sm">
+              <Download className="mr-2 h-4 w-4" />
+              Export
+            </Button>
+          </div>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                  ID
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                  Creator
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                  Offer
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                  Creator Earnings
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                  Platform Fee
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                  Total Cost
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                  Status
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                  Date
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200 bg-white">
-              {payouts.map((payout) => (
-                <tr key={payout.id} className="transition hover:bg-gray-50">
-                  <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900">{payout.id}</td>
-                  <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-900">{payout.creator}</td>
-                  <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-600">{payout.offer}</td>
-                  <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900">
-                    ${payout.grossAmount}
-                  </td>
-                  <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-600">
-                    ${(payout.platformFee + payout.processingFee).toFixed(2)}
-                  </td>
-                  <td className="whitespace-nowrap px-6 py-4 text-sm font-bold text-red-600">
-                    ${payout.totalDue.toFixed(2)}
-                  </td>
-                  <td className="whitespace-nowrap px-6 py-4">
-                    <StatusBadge status={payout.status} />
-                  </td>
-                  <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-600">
-                    {payout.completedDate || payout.approvedDate || payout.proofSubmitted}
-                  </td>
+          {payouts.length === 0 ? (
+            <div className="py-12 text-center">
+              <p className="text-gray-500">No payment history yet</p>
+            </div>
+          ) : (
+            <table className="w-full">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                    ID
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                    Description
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                    Creator Earnings
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                    Fees
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                    Status
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                    Date
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-gray-200 bg-white">
+                {payouts.map((payout) => (
+                  <tr key={payout.id} className="transition hover:bg-gray-50">
+                    <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900">
+                      {payout.id.slice(0, 8)}...
+                    </td>
+                    <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-900">
+                      {payout.description || "Payment"}
+                    </td>
+                    <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900">
+                      ${parseFloat(payout.grossAmount).toFixed(2)}
+                    </td>
+                    <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-600">
+                      ${(parseFloat(payout.platformFeeAmount) + parseFloat(payout.stripeFeeAmount)).toFixed(2)}
+                    </td>
+                    <td className="whitespace-nowrap px-6 py-4">
+                      <StatusBadge status={payout.status} />
+                    </td>
+                    <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-600">
+                      {payout.completedAt
+                        ? new Date(payout.completedAt).toLocaleDateString()
+                        : new Date(payout.createdAt).toLocaleDateString()}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
       </div>
     </div>
   );
 }
 
-type AdminPaymentDashboardProps = {
+function AdminPaymentDashboard({
+  creatorPayments,
+  companyPayouts,
+}: {
   creatorPayments: CreatorPayment[];
-  companyPayouts: CompanyPayout[];
-};
+  companyPayouts: CreatorPayment[];
+}) {
+  const allPayments = useMemo(
+    () => [...creatorPayments, ...companyPayouts],
+    [creatorPayments, companyPayouts]
+  );
 
-function AdminPaymentDashboard({ creatorPayments, companyPayouts }: AdminPaymentDashboardProps) {
-  const allTransactions = useMemo(() => {
-    return [...creatorPayments, ...companyPayouts] as Array<CreatorPayment | CompanyPayout>;
-  }, [companyPayouts, creatorPayments]);
-
-  const totalPlatformRevenue = allTransactions.reduce((sum, transaction) => {
-    const platformFee = "platformFee" in transaction ? transaction.platformFee : 0;
-    const processingFee = "processingFee" in transaction ? transaction.processingFee : 0;
-    return sum + platformFee + processingFee;
+  const totalPlatformRevenue = allPayments.reduce((sum, payment) => {
+    return sum + parseFloat(payment.platformFeeAmount) + parseFloat(payment.stripeFeeAmount);
   }, 0);
 
-  const totalGMV = allTransactions.reduce((sum, transaction) => {
-    const gross = "grossAmount" in transaction ? transaction.grossAmount : 0;
-    return sum + gross;
+  const totalGMV = allPayments.reduce((sum, payment) => {
+    return sum + parseFloat(payment.grossAmount);
   }, 0);
 
-  const disputedPayments = companyPayouts.filter((payout) => payout.status === "disputed");
-
-  const getNetAmount = (transaction: CreatorPayment | CompanyPayout) => {
-    if ("netAmount" in transaction) {
-      return transaction.netAmount;
-    }
-    return transaction.grossAmount - transaction.platformFee - transaction.processingFee;
-  };
-
-  const getTransactionDate = (transaction: CreatorPayment | CompanyPayout) => {
-    if ("completedDate" in transaction && transaction.completedDate) {
-      return transaction.completedDate;
-    }
-    if ("scheduledDate" in transaction && transaction.scheduledDate) {
-      return transaction.scheduledDate;
-    }
-    if ("approvedDate" in transaction && transaction.approvedDate) {
-      return transaction.approvedDate;
-    }
-    if ("proofSubmitted" in transaction && transaction.proofSubmitted) {
-      return transaction.proofSubmitted;
-    }
-    return "—";
-  };
+  const pendingCount = allPayments.filter(
+    (p) => p.status === "pending" || p.status === "processing"
+  ).length;
 
   return (
     <div className="space-y-6">
@@ -1062,86 +709,17 @@ function AdminPaymentDashboard({ creatorPayments, companyPayouts }: AdminPayment
             <span className="text-sm text-gray-600">Total Transactions</span>
             <Send className="h-5 w-5 text-blue-500" />
           </div>
-          <div className="text-3xl font-bold text-gray-900">{allTransactions.length}</div>
+          <div className="text-3xl font-bold text-gray-900">{allPayments.length}</div>
           <div className="mt-1 text-xs text-gray-500">All-time</div>
         </div>
 
-        <div className="rounded-xl bg-gradient-to-br from-red-500 to-red-600 p-6 text-white">
+        <div className="rounded-xl bg-gradient-to-br from-yellow-500 to-yellow-600 p-6 text-white">
           <div className="mb-2 flex items-center justify-between">
-            <span className="text-sm text-red-100">Disputes</span>
-            <AlertTriangle className="h-5 w-5 text-red-100" />
+            <span className="text-sm text-yellow-100">Pending</span>
+            <Clock className="h-5 w-5 text-yellow-100" />
           </div>
-          <div className="text-3xl font-bold">{disputedPayments.length}</div>
-          <div className="mt-1 text-xs text-red-100">Require resolution</div>
-        </div>
-      </div>
-
-      {disputedPayments.length > 0 && (
-        <div className="rounded-xl border-2 border-red-200 bg-red-50 p-6">
-          <h3 className="mb-4 flex items-center gap-2 text-lg font-bold text-red-900">
-            <AlertTriangle className="h-5 w-5" />
-            Payment Disputes Requiring Action
-          </h3>
-          <div className="space-y-3">
-            {disputedPayments.map((dispute) => (
-              <div key={dispute.id} className="rounded-lg border-2 border-red-300 bg-white p-4">
-                <div className="mb-2 flex items-start justify-between">
-                  <div>
-                    <div className="font-bold text-gray-900">{dispute.id}</div>
-                    <div className="text-sm text-gray-600">
-                      {dispute.creator} → {dispute.offer}
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="font-bold text-gray-900">${dispute.grossAmount}</div>
-                    <div className="text-xs text-gray-500">Creator amount</div>
-                  </div>
-                </div>
-                {dispute.disputeReason && (
-                  <div className="mb-3 rounded bg-red-50 p-3">
-                    <div className="mb-1 text-xs font-medium text-red-900">Dispute Reason:</div>
-                    <div className="text-sm text-red-800">{dispute.disputeReason}</div>
-                  </div>
-                )}
-                <div className="flex gap-2">
-                  <Button className="flex-1 bg-green-600 text-white hover:bg-green-700">Approve Payment</Button>
-                  <Button className="flex-1 bg-blue-600 text-white hover:bg-blue-700">Contact Parties</Button>
-                  <Button className="flex-1 bg-red-600 text-white hover:bg-red-700">Reject Claim</Button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <div className="rounded-xl border-2 border-gray-200 bg-white p-6">
-        <div className="mb-6 flex items-center justify-between">
-          <div>
-            <h3 className="text-lg font-bold text-gray-900">Scheduled Payouts</h3>
-            <p className="mt-1 text-sm text-gray-600">Process batch payments for approved transactions</p>
-          </div>
-          <Button className="gap-2 bg-blue-600 text-white hover:bg-blue-700">
-            <Send className="h-4 w-4" />
-            Process All Scheduled
-          </Button>
-        </div>
-
-        <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
-          <div className="rounded-lg bg-blue-50 p-4">
-            <div className="text-sm text-blue-800">Due Today</div>
-            <div className="text-2xl font-bold text-blue-900">3</div>
-            <div className="mt-1 text-xs text-blue-700">$2,412.50 total</div>
-          </div>
-          <div className="rounded-lg bg-yellow-50 p-4">
-            <div className="text-sm text-yellow-800">Next 7 Days</div>
-            <div className="text-2xl font-bold text-yellow-900">8</div>
-            <div className="mt-1 text-xs text-yellow-700">$5,678.90 total</div>
-          </div>
-          <div className="rounded-lg bg-green-50 p-4">
-            <div className="text-sm text-green-800">Next 30 Days</div>
-            <div className="text-2xl font-bold text-green-900">24</div>
-            <div className="mt-1 text-xs text-green-700">$18,234.60 total</div>
-          </div>
+          <div className="text-3xl font-bold">{pendingCount}</div>
+          <div className="mt-1 text-xs text-yellow-100">Awaiting processing</div>
         </div>
       </div>
 
@@ -1163,104 +741,68 @@ function AdminPaymentDashboard({ creatorPayments, companyPayouts }: AdminPayment
           </div>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                  Transaction ID
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                  Type
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                  From/To
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                  Gross
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                  Platform Fee
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                  Net
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                  Status
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                  Date
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200 bg-white">
-              {allTransactions.slice(0, 10).map((transaction) => {
-                const isCompanyPayout = "creator" in transaction;
-                return (
-                  <tr key={transaction.id} className="transition hover:bg-gray-50">
+          {allPayments.length === 0 ? (
+            <div className="py-12 text-center">
+              <p className="text-gray-500">No payment data available</p>
+            </div>
+          ) : (
+            <table className="w-full">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                    Transaction ID
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                    Description
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                    Gross
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                    Platform Fee
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                    Net
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                    Status
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                    Date
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200 bg-white">
+                {allPayments.map((payment) => (
+                  <tr key={payment.id} className="transition hover:bg-gray-50">
                     <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900">
-                      {transaction.id}
-                    </td>
-                    <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-600">
-                      {isCompanyPayout ? "Company → Creator" : "Platform → Creator"}
+                      {payment.id.slice(0, 8)}...
                     </td>
                     <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-900">
-                      {isCompanyPayout ? transaction.creator : transaction.company}
+                      {payment.description || "Payment"}
                     </td>
                     <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900">
-                      ${transaction.grossAmount}
+                      ${parseFloat(payment.grossAmount).toFixed(2)}
                     </td>
                     <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-purple-600">
-                      ${((transaction.platformFee ?? 0) + (transaction.processingFee ?? 0)).toFixed(2)}
+                      ${(parseFloat(payment.platformFeeAmount) + parseFloat(payment.stripeFeeAmount)).toFixed(2)}
                     </td>
                     <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-green-600">
-                      ${getNetAmount(transaction)}
+                      ${parseFloat(payment.netAmount).toFixed(2)}
                     </td>
                     <td className="whitespace-nowrap px-6 py-4">
-                      <StatusBadge status={transaction.status} />
+                      <StatusBadge status={payment.status} />
                     </td>
                     <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-600">
-                      {getTransactionDate(transaction)}
-                    </td>
-                    <td className="whitespace-nowrap px-6 py-4 text-sm">
-                      <Button variant="ghost" className="p-0">
-                        View
-                      </Button>
+                      {payment.completedAt
+                        ? new Date(payment.completedAt).toLocaleDateString()
+                        : new Date(payment.createdAt).toLocaleDateString()}
                     </td>
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div className="rounded-xl border-2 border-gray-200 bg-white p-6">
-        <h3 className="mb-4 text-lg font-bold text-gray-900">Financial Reports</h3>
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-          <Button
-            variant="outline"
-            className="h-auto flex-col items-start gap-1 border-2 border-gray-200 bg-white py-4 text-left hover:border-blue-500 hover:bg-blue-50"
-          >
-            <span className="font-medium text-gray-900">Revenue Report</span>
-            <span className="text-sm text-gray-600">Platform fees & listing revenue</span>
-          </Button>
-          <Button
-            variant="outline"
-            className="h-auto flex-col items-start gap-1 border-2 border-gray-200 bg-white py-4 text-left hover:border-blue-500 hover:bg-blue-50"
-          >
-            <span className="font-medium text-gray-900">Payout Report</span>
-            <span className="text-sm text-gray-600">Creator & company payments</span>
-          </Button>
-          <Button
-            variant="outline"
-            className="h-auto flex-col items-start gap-1 border-2 border-gray-200 bg-white py-4 text-left hover:border-blue-500 hover:bg-blue-50"
-          >
-            <span className="font-medium text-gray-900">Outstanding Balances</span>
-            <span className="text-sm text-gray-600">Pending & scheduled payments</span>
-          </Button>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
       </div>
     </div>
@@ -1275,6 +817,31 @@ function AdminPaymentSettings() {
   const [notificationEmail, setNotificationEmail] = useState("finance@creatorlink.com");
   const [escalationEmail, setEscalationEmail] = useState("compliance@creatorlink.com");
   const [includeReports, setIncludeReports] = useState(true);
+
+  const adminFundingMethods: AdminFundingMethod[] = [
+    {
+      id: 1,
+      name: "Primary Operating Account",
+      type: "bank",
+      last4: "4321",
+      status: "active",
+      isPrimary: true,
+    },
+    {
+      id: 2,
+      name: "Reserve Treasury Wallet",
+      type: "wallet",
+      last4: "9fae",
+      status: "active",
+    },
+    {
+      id: 3,
+      name: "Backup Settlement Card",
+      type: "card",
+      last4: "7788",
+      status: "pending",
+    },
+  ];
 
   const typeLabels: Record<AdminFundingMethod["type"], string> = {
     bank: "Bank Account",
@@ -1509,9 +1076,26 @@ export default function PaymentSettings() {
     }
   }, [user?.role]);
 
+  // Fetch payment methods
   const { data: paymentMethods } = useQuery<PaymentMethod[]>({
     queryKey: ["/api/payment-settings"],
     enabled: isAuthenticated,
+  });
+
+  // Fetch payments based on user role
+  const { data: creatorPayments = [] } = useQuery<CreatorPayment[]>({
+    queryKey: ["/api/payments/creator"],
+    enabled: isAuthenticated && user?.role === "creator",
+  });
+
+  const { data: companyPayments = [] } = useQuery<CreatorPayment[]>({
+    queryKey: ["/api/payments/company"],
+    enabled: isAuthenticated && user?.role === "company",
+  });
+
+  const { data: allPayments = [] } = useQuery<CreatorPayment[]>({
+    queryKey: ["/api/payments/all"],
+    enabled: isAuthenticated && user?.role === "admin",
   });
 
   const addPaymentMethodMutation = useMutation({
@@ -1577,7 +1161,7 @@ export default function PaymentSettings() {
     return null;
   }
 
-  const role = user.role;
+  const role: User["role"] = user.role;
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
@@ -1661,14 +1245,16 @@ export default function PaymentSettings() {
                   }`}
                 >
                   Pending Approvals
-                  <span className="ml-2 inline-flex items-center rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-bold text-yellow-800">
-                    {companyPayouts.filter((payout) => payout.status === "pending_approval").length}
-                  </span>
+                  {companyPayments.filter((p) => p.status === "pending" || p.status === "processing").length > 0 && (
+                    <span className="ml-2 inline-flex items-center rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-bold text-yellow-800">
+                      {companyPayments.filter((p) => p.status === "pending" || p.status === "processing").length}
+                    </span>
+                  )}
                 </button>
               </div>
             </div>
-            {activeTab === "overview" && <CompanyOverview payouts={companyPayouts} />}
-            {activeTab === "approvals" && <CompanyPayoutApproval payouts={companyPayouts} />}
+            {activeTab === "overview" && <CompanyOverview payouts={companyPayments} />}
+            {activeTab === "approvals" && <CompanyPayoutApproval payouts={companyPayments} />}
           </>
         )}
 
@@ -1699,7 +1285,7 @@ export default function PaymentSettings() {
               </div>
             </div>
             {activeTab === "dashboard" && (
-              <AdminPaymentDashboard creatorPayments={creatorPayments} companyPayouts={companyPayouts} />
+              <AdminPaymentDashboard creatorPayments={allPayments} companyPayouts={allPayments} />
             )}
             {activeTab === "settings" && <AdminPaymentSettings />}
           </>
@@ -1708,4 +1294,3 @@ export default function PaymentSettings() {
     </div>
   );
 }
-
