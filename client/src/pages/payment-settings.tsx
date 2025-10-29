@@ -267,6 +267,181 @@ function CreatorOverview({ payments }: CreatorOverviewProps) {
 
   const role: User["role"] = user.role;
 
+  return "creator";
+}
+
+const creatorPayments: CreatorPayment[] = [
+  {
+    id: "PAY-001",
+    offer: "FitApp Premium",
+    company: "FitTech Inc",
+    grossAmount: 500,
+    platformFee: 20,
+    processingFee: 15,
+    netAmount: 465,
+    status: "completed",
+    method: "E-transfer",
+    scheduledDate: "2025-10-25",
+    completedDate: "2025-10-25",
+    proof: "video_link_123.mp4",
+  },
+  {
+    id: "PAY-002",
+    offer: "BeautyBox Subscription",
+    company: "BeautyBox Co",
+    grossAmount: 750,
+    platformFee: 30,
+    processingFee: 22.5,
+    netAmount: 697.5,
+    status: "pending",
+    method: "PayPal",
+    scheduledDate: "2025-11-01",
+    proof: "video_link_456.mp4",
+  },
+  {
+    id: "PAY-003",
+    offer: "TechGadget Pro",
+    company: "TechGear LLC",
+    grossAmount: 1200,
+    platformFee: 48,
+    processingFee: 36,
+    netAmount: 1116,
+    status: "scheduled",
+    method: "Wire Transfer",
+    scheduledDate: "2025-11-05",
+  },
+];
+
+const companyPayouts: CompanyPayout[] = [
+  {
+    id: "POUT-001",
+    creator: "@fitnessJoe",
+    offer: "FitApp Premium",
+    grossAmount: 500,
+    platformFee: 20,
+    processingFee: 15,
+    totalDue: 535,
+    status: "pending_approval",
+    proofSubmitted: "2025-10-28",
+    workCompleted: "2025-10-27",
+    proof: "video_link_123.mp4",
+  },
+  {
+    id: "POUT-002",
+    creator: "@beautyQueen",
+    offer: "FitApp Premium",
+    grossAmount: 750,
+    platformFee: 30,
+    processingFee: 22.5,
+    totalDue: 802.5,
+    status: "approved",
+    scheduledDate: "2025-11-01",
+    workCompleted: "2025-10-25",
+    approvedDate: "2025-10-28",
+  },
+  {
+    id: "POUT-003",
+    creator: "@techReviewer",
+    offer: "FitApp Premium",
+    grossAmount: 1200,
+    platformFee: 48,
+    processingFee: 36,
+    totalDue: 1284,
+    status: "completed",
+    completedDate: "2025-10-20",
+    workCompleted: "2025-10-15",
+  },
+  {
+    id: "POUT-004",
+    creator: "@lifestyleVlog",
+    offer: "FitApp Premium",
+    grossAmount: 300,
+    platformFee: 12,
+    processingFee: 9,
+    totalDue: 321,
+    status: "disputed",
+    disputeReason: "Video quality concerns",
+    workCompleted: "2025-10-26",
+  },
+];
+
+const adminFundingMethods: AdminFundingMethod[] = [
+  {
+    id: 1,
+    name: "Primary Operating Account",
+    type: "bank",
+    last4: "4321",
+    status: "active",
+    isPrimary: true,
+  },
+  {
+    id: 2,
+    name: "Reserve Treasury Wallet",
+    type: "wallet",
+    last4: "9fae",
+    status: "active",
+  },
+  {
+    id: 3,
+    name: "Backup Settlement Card",
+    type: "card",
+    last4: "7788",
+    status: "pending",
+  },
+];
+
+const statusConfig: Record<PaymentStatus, { bg: string; text: string; icon: typeof Clock; label: string }> = {
+  pending: { bg: "bg-yellow-100", text: "text-yellow-800", icon: Clock, label: "Pending" },
+  pending_approval: {
+    bg: "bg-yellow-100",
+    text: "text-yellow-800",
+    icon: Clock,
+    label: "Pending Approval",
+  },
+  scheduled: { bg: "bg-blue-100", text: "text-blue-800", icon: Clock, label: "Scheduled" },
+  approved: { bg: "bg-green-100", text: "text-green-800", icon: CheckCircle, label: "Approved" },
+  completed: { bg: "bg-green-100", text: "text-green-800", icon: CheckCircle, label: "Completed" },
+  failed: { bg: "bg-red-100", text: "text-red-800", icon: XCircle, label: "Failed" },
+  disputed: { bg: "bg-red-100", text: "text-red-800", icon: AlertTriangle, label: "Disputed" },
+};
+
+function StatusBadge({ status }: { status: PaymentStatus }) {
+  const config = statusConfig[status];
+  const Icon = config.icon;
+  return (
+    <span
+      className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium ${config.bg} ${config.text}`}
+    >
+      <Icon className="w-3 h-3" />
+      {config.label}
+    </span>
+  );
+}
+
+type CreatorOverviewProps = {
+  payments: CreatorPayment[];
+};
+
+function CreatorOverview({ payments }: CreatorOverviewProps) {
+  const { totalEarnings, pendingEarnings, completedEarnings } = useMemo(() => {
+    const totals = payments.reduce(
+      (acc, payment) => {
+        const amount = payment.netAmount;
+        acc.totalEarnings += amount;
+        if (payment.status === "completed") {
+          acc.completedEarnings += amount;
+        }
+        if (payment.status === "pending" || payment.status === "scheduled") {
+          acc.pendingEarnings += amount;
+        }
+        return acc;
+      },
+      { totalEarnings: 0, pendingEarnings: 0, completedEarnings: 0 }
+    );
+
+    return totals;
+  }, [payments]);
+
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
