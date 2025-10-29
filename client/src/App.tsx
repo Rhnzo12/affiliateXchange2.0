@@ -99,6 +99,7 @@ function ProtectedRouter() {
                     <Route path="/analytics" component={Analytics} />
                     <Route path="/messages" component={Messages} />
                     <Route path="/favorites" component={Favorites} />
+                    <Route path="/creator/payment-settings" component={PaymentSettings} />
                   </>
                 )}
 
@@ -119,6 +120,7 @@ function ProtectedRouter() {
                     <Route path="/company/analytics" component={Analytics} />
                     <Route path="/company/messages" component={Messages} />
                     <Route path="/company/reviews" component={CompanyReviews} />
+                    <Route path="/company/payment-settings" component={PaymentSettings} />
                   </>
                 )}
 
@@ -133,6 +135,7 @@ function ProtectedRouter() {
                     <Route path="/admin/creators" component={AdminCreators} />
                     <Route path="/admin/reviews" component={AdminReviews} />
                     <Route path="/admin/users" component={AdminDashboard} />
+                    <Route path="/admin/payment-settings" component={PaymentSettings} />
                   </>
                 )}
 
