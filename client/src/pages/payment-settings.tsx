@@ -34,44 +34,24 @@ import type { User } from "@shared/schema";
 
 type PaymentStatus =
   | "pending"
-  | "pending_approval"
-  | "scheduled"
-  | "approved"
+  | "processing"
   | "completed"
   | "failed"
-  | "disputed";
+  | "refunded";
 
 type CreatorPayment = {
   id: string;
-  offer: string;
-  company: string;
-  grossAmount: number;
-  platformFee: number;
-  processingFee: number;
-  netAmount: number;
+  offerId: string;
+  companyId: string;
+  grossAmount: string;
+  platformFeeAmount: string;
+  stripeFeeAmount: string;
+  netAmount: string;
   status: PaymentStatus;
-  method: string;
-  scheduledDate?: string;
-  completedDate?: string;
-  proof?: string;
-};
-
-type CompanyPayout = {
-  id: string;
-  creator: string;
-  offer: string;
-  grossAmount: number;
-  platformFee: number;
-  processingFee: number;
-  totalDue: number;
-  status: PaymentStatus;
-  proofSubmitted?: string;
-  workCompleted?: string;
-  scheduledDate?: string;
-  approvedDate?: string;
-  completedDate?: string;
-  disputeReason?: string;
-  proof?: string;
+  paymentMethod?: string;
+  description?: string;
+  completedAt?: string;
+  createdAt: string;
 };
 
 type PaymentMethod = {
@@ -95,139 +75,12 @@ type AdminFundingMethod = {
   isPrimary?: boolean;
 };
 
-const creatorPayments: CreatorPayment[] = [
-  {
-    id: "PAY-001",
-    offer: "FitApp Premium",
-    company: "FitTech Inc",
-    grossAmount: 500,
-    platformFee: 20,
-    processingFee: 15,
-    netAmount: 465,
-    status: "completed",
-    method: "E-transfer",
-    scheduledDate: "2025-10-25",
-    completedDate: "2025-10-25",
-    proof: "video_link_123.mp4",
-  },
-  {
-    id: "PAY-002",
-    offer: "BeautyBox Subscription",
-    company: "BeautyBox Co",
-    grossAmount: 750,
-    platformFee: 30,
-    processingFee: 22.5,
-    netAmount: 697.5,
-    status: "pending",
-    method: "PayPal",
-    scheduledDate: "2025-11-01",
-    proof: "video_link_456.mp4",
-  },
-  {
-    id: "PAY-003",
-    offer: "TechGadget Pro",
-    company: "TechGear LLC",
-    grossAmount: 1200,
-    platformFee: 48,
-    processingFee: 36,
-    netAmount: 1116,
-    status: "scheduled",
-    method: "Wire Transfer",
-    scheduledDate: "2025-11-05",
-  },
-];
-
-const companyPayouts: CompanyPayout[] = [
-  {
-    id: "POUT-001",
-    creator: "@fitnessJoe",
-    offer: "FitApp Premium",
-    grossAmount: 500,
-    platformFee: 20,
-    processingFee: 15,
-    totalDue: 535,
-    status: "pending_approval",
-    proofSubmitted: "2025-10-28",
-    workCompleted: "2025-10-27",
-    proof: "video_link_123.mp4",
-  },
-  {
-    id: "POUT-002",
-    creator: "@beautyQueen",
-    offer: "FitApp Premium",
-    grossAmount: 750,
-    platformFee: 30,
-    processingFee: 22.5,
-    totalDue: 802.5,
-    status: "approved",
-    scheduledDate: "2025-11-01",
-    workCompleted: "2025-10-25",
-    approvedDate: "2025-10-28",
-  },
-  {
-    id: "POUT-003",
-    creator: "@techReviewer",
-    offer: "FitApp Premium",
-    grossAmount: 1200,
-    platformFee: 48,
-    processingFee: 36,
-    totalDue: 1284,
-    status: "completed",
-    completedDate: "2025-10-20",
-    workCompleted: "2025-10-15",
-  },
-  {
-    id: "POUT-004",
-    creator: "@lifestyleVlog",
-    offer: "FitApp Premium",
-    grossAmount: 300,
-    platformFee: 12,
-    processingFee: 9,
-    totalDue: 321,
-    status: "disputed",
-    disputeReason: "Video quality concerns",
-    workCompleted: "2025-10-26",
-  },
-];
-
-const adminFundingMethods: AdminFundingMethod[] = [
-  {
-    id: 1,
-    name: "Primary Operating Account",
-    type: "bank",
-    last4: "4321",
-    status: "active",
-    isPrimary: true,
-  },
-  {
-    id: 2,
-    name: "Reserve Treasury Wallet",
-    type: "wallet",
-    last4: "9fae",
-    status: "active",
-  },
-  {
-    id: 3,
-    name: "Backup Settlement Card",
-    type: "card",
-    last4: "7788",
-    status: "pending",
-  },
-];
-
 const statusConfig: Record<PaymentStatus, { bg: string; text: string; icon: typeof Clock; label: string }> = {
   pending: { bg: "bg-yellow-100", text: "text-yellow-800", icon: Clock, label: "Pending" },
-  pending_approval: {
-    bg: "bg-yellow-100",
-    text: "text-yellow-800",
-    icon: Clock,
-    label: "Pending Approval",
-  },
-  scheduled: { bg: "bg-blue-100", text: "text-blue-800", icon: Clock, label: "Scheduled" },
-  approved: { bg: "bg-green-100", text: "text-green-800", icon: CheckCircle, label: "Approved" },
+  processing: { bg: "bg-blue-100", text: "text-blue-800", icon: Clock, label: "Processing" },
   completed: { bg: "bg-green-100", text: "text-green-800", icon: CheckCircle, label: "Completed" },
   failed: { bg: "bg-red-100", text: "text-red-800", icon: XCircle, label: "Failed" },
-  disputed: { bg: "bg-red-100", text: "text-red-800", icon: AlertTriangle, label: "Disputed" },
+  refunded: { bg: "bg-gray-100", text: "text-gray-800", icon: AlertTriangle, label: "Refunded" },
 };
 
 function StatusBadge({ status }: { status: PaymentStatus }) {
@@ -243,9 +96,553 @@ function StatusBadge({ status }: { status: PaymentStatus }) {
   );
 }
 
-// [All component functions remain the same: CreatorOverview, CreatorPaymentSettings, 
-// CompanyPayoutApproval, CompanyOverview, AdminPaymentDashboard]
-// ... (keeping the same implementations as in your original code)
+function CreatorOverview({ payments }: { payments: CreatorPayment[] }) {
+  const totalEarnings = payments
+    .filter((p) => p.status === "completed")
+    .reduce((sum, p) => sum + parseFloat(p.netAmount), 0);
+
+  const pendingPayments = payments.filter((p) => p.status === "pending" || p.status === "processing");
+  const completedPayments = payments.filter((p) => p.status === "completed");
+
+  return (
+    <div className="space-y-6">
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+        <div className="rounded-xl border-2 border-gray-200 bg-white p-6">
+          <div className="flex items-center gap-3">
+            <div className="rounded-lg bg-green-100 p-3">
+              <DollarSign className="h-6 w-6 text-green-600" />
+            </div>
+            <div>
+              <p className="text-sm text-gray-600">Total Earnings</p>
+              <p className="text-2xl font-bold text-gray-900">${totalEarnings.toFixed(2)}</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-xl border-2 border-gray-200 bg-white p-6">
+          <div className="flex items-center gap-3">
+            <div className="rounded-lg bg-blue-100 p-3">
+              <Clock className="h-6 w-6 text-blue-600" />
+            </div>
+            <div>
+              <p className="text-sm text-gray-600">Pending Payments</p>
+              <p className="text-2xl font-bold text-gray-900">{pendingPayments.length}</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-xl border-2 border-gray-200 bg-white p-6">
+          <div className="flex items-center gap-3">
+            <div className="rounded-lg bg-purple-100 p-3">
+              <TrendingUp className="h-6 w-6 text-purple-600" />
+            </div>
+            <div>
+              <p className="text-sm text-gray-600">Completed</p>
+              <p className="text-2xl font-bold text-gray-900">{completedPayments.length}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Payment History */}
+      <div className="rounded-xl border-2 border-gray-200 bg-white p-6">
+        <div className="mb-6 flex items-center justify-between">
+          <div>
+            <h3 className="text-lg font-bold text-gray-900">Payment History</h3>
+            <p className="mt-1 text-sm text-gray-600">Track your earnings from completed campaigns</p>
+          </div>
+          <Button variant="outline" size="sm">
+            <Download className="mr-2 h-4 w-4" />
+            Export
+          </Button>
+        </div>
+
+        <div className="space-y-4">
+          {payments.length === 0 ? (
+            <div className="py-12 text-center">
+              <p className="text-gray-500">No payment history yet</p>
+            </div>
+          ) : (
+            payments.map((payment) => (
+              <div
+                key={payment.id}
+                className="flex flex-col gap-4 rounded-lg border border-gray-200 p-4 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <div className="flex-1">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="font-medium text-gray-900">{payment.description || `Payment ${payment.id.slice(0, 8)}`}</p>
+                      <p className="text-sm text-gray-500">
+                        {payment.completedAt
+                          ? new Date(payment.completedAt).toLocaleDateString()
+                          : new Date(payment.createdAt).toLocaleDateString()}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="mt-2 flex items-center gap-4 text-sm text-gray-600">
+                    <span>Gross: ${parseFloat(payment.grossAmount).toFixed(2)}</span>
+                    <span>Platform Fee: ${parseFloat(payment.platformFeeAmount).toFixed(2)}</span>
+                    <span>Processing: ${parseFloat(payment.stripeFeeAmount).toFixed(2)}</span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-4">
+                  <div className="text-right">
+                    <p className="text-lg font-bold text-gray-900">${parseFloat(payment.netAmount).toFixed(2)}</p>
+                    <p className="text-xs text-gray-500">{payment.paymentMethod || "N/A"}</p>
+                  </div>
+                  <StatusBadge status={payment.status} />
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CreatorPaymentSettings({
+  paymentMethods,
+  payoutMethod,
+  setPayoutMethod,
+  payoutEmail,
+  setPayoutEmail,
+  bankRoutingNumber,
+  setBankRoutingNumber,
+  bankAccountNumber,
+  setBankAccountNumber,
+  paypalEmail,
+  setPaypalEmail,
+  cryptoWalletAddress,
+  setCryptoWalletAddress,
+  cryptoNetwork,
+  setCryptoNetwork,
+  onAddPaymentMethod,
+  isSubmitting,
+}: {
+  paymentMethods?: PaymentMethod[];
+  payoutMethod: string;
+  setPayoutMethod: (value: string) => void;
+  payoutEmail: string;
+  setPayoutEmail: (value: string) => void;
+  bankRoutingNumber: string;
+  setBankRoutingNumber: (value: string) => void;
+  bankAccountNumber: string;
+  setBankAccountNumber: (value: string) => void;
+  paypalEmail: string;
+  setPaypalEmail: (value: string) => void;
+  cryptoWalletAddress: string;
+  setCryptoWalletAddress: (value: string) => void;
+  cryptoNetwork: string;
+  setCryptoNetwork: (value: string) => void;
+  onAddPaymentMethod: () => void;
+  isSubmitting: boolean;
+}) {
+  return (
+    <div className="space-y-6">
+      {/* Existing Payment Methods */}
+      {paymentMethods && paymentMethods.length > 0 && (
+        <div className="rounded-xl border-2 border-gray-200 bg-white p-6">
+          <h3 className="mb-4 text-lg font-bold text-gray-900">Saved Payment Methods</h3>
+          <div className="space-y-4">
+            {paymentMethods.map((method) => (
+              <div
+                key={method.id}
+                className="flex items-center justify-between rounded-lg border border-gray-200 p-4"
+              >
+                <div>
+                  <p className="font-medium text-gray-900">
+                    {method.payoutMethod === "etransfer" && "E-Transfer"}
+                    {method.payoutMethod === "wire" && "Wire Transfer"}
+                    {method.payoutMethod === "paypal" && "PayPal"}
+                    {method.payoutMethod === "crypto" && "Cryptocurrency"}
+                  </p>
+                  <p className="text-sm text-gray-500">
+                    {method.payoutEmail || method.paypalEmail || method.cryptoWalletAddress || "Bank Account"}
+                  </p>
+                </div>
+                {method.isDefault && <Badge>Default</Badge>}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Add New Payment Method */}
+      <div className="rounded-xl border-2 border-gray-200 bg-white p-6">
+        <h3 className="mb-4 text-lg font-bold text-gray-900">Add Payment Method</h3>
+
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="payout-method">Payout Method</Label>
+            <Select value={payoutMethod} onValueChange={setPayoutMethod}>
+              <SelectTrigger id="payout-method">
+                <SelectValue placeholder="Select method" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="etransfer">E-Transfer</SelectItem>
+                <SelectItem value="wire">Wire Transfer</SelectItem>
+                <SelectItem value="paypal">PayPal</SelectItem>
+                <SelectItem value="crypto">Cryptocurrency</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {payoutMethod === "etransfer" && (
+            <div className="space-y-2">
+              <Label htmlFor="payout-email">Email Address</Label>
+              <Input
+                id="payout-email"
+                type="email"
+                placeholder="your@email.com"
+                value={payoutEmail}
+                onChange={(e) => setPayoutEmail(e.target.value)}
+              />
+            </div>
+          )}
+
+          {payoutMethod === "wire" && (
+            <>
+              <div className="space-y-2">
+                <Label htmlFor="routing-number">Routing Number</Label>
+                <Input
+                  id="routing-number"
+                  placeholder="123456789"
+                  value={bankRoutingNumber}
+                  onChange={(e) => setBankRoutingNumber(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="account-number">Account Number</Label>
+                <Input
+                  id="account-number"
+                  placeholder="0000000000"
+                  value={bankAccountNumber}
+                  onChange={(e) => setBankAccountNumber(e.target.value)}
+                />
+              </div>
+            </>
+          )}
+
+          {payoutMethod === "paypal" && (
+            <div className="space-y-2">
+              <Label htmlFor="paypal-email">PayPal Email</Label>
+              <Input
+                id="paypal-email"
+                type="email"
+                placeholder="paypal@email.com"
+                value={paypalEmail}
+                onChange={(e) => setPaypalEmail(e.target.value)}
+              />
+            </div>
+          )}
+
+          {payoutMethod === "crypto" && (
+            <>
+              <div className="space-y-2">
+                <Label htmlFor="crypto-wallet">Wallet Address</Label>
+                <Input
+                  id="crypto-wallet"
+                  placeholder="0x..."
+                  value={cryptoWalletAddress}
+                  onChange={(e) => setCryptoWalletAddress(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="crypto-network">Network</Label>
+                <Select value={cryptoNetwork} onValueChange={setCryptoNetwork}>
+                  <SelectTrigger id="crypto-network">
+                    <SelectValue placeholder="Select network" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ethereum">Ethereum</SelectItem>
+                    <SelectItem value="polygon">Polygon</SelectItem>
+                    <SelectItem value="bsc">BSC</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </>
+          )}
+
+          <Button onClick={onAddPaymentMethod} disabled={isSubmitting} className="w-full">
+            {isSubmitting ? "Adding..." : "Add Payment Method"}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CompanyPayoutApproval({ payouts }: { payouts: CreatorPayment[] }) {
+  const pendingPayouts = payouts.filter((p) => p.status === "pending" || p.status === "processing");
+
+  return (
+    <div className="space-y-6">
+      <div className="rounded-xl border-2 border-gray-200 bg-white p-6">
+        <div className="mb-6">
+          <h3 className="text-lg font-bold text-gray-900">Pending Approvals</h3>
+          <p className="mt-1 text-sm text-gray-600">
+            Review and approve creator payouts for completed work
+          </p>
+        </div>
+
+        <div className="space-y-4">
+          {pendingPayouts.length === 0 ? (
+            <div className="py-12 text-center">
+              <p className="text-gray-500">No pending approvals</p>
+            </div>
+          ) : (
+            pendingPayouts.map((payout) => (
+              <div
+                key={payout.id}
+                className="rounded-lg border border-gray-200 p-4"
+              >
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <p className="font-medium text-gray-900">
+                      {payout.description || `Payment ${payout.id.slice(0, 8)}`}
+                    </p>
+                    <p className="text-sm text-gray-500">
+                      {new Date(payout.createdAt).toLocaleDateString()}
+                    </p>
+                    <div className="mt-2 flex items-center gap-4 text-sm text-gray-600">
+                      <span>Amount: ${parseFloat(payout.grossAmount).toFixed(2)}</span>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button size="sm" variant="outline">
+                      View Details
+                    </Button>
+                    <Button size="sm">Approve</Button>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CompanyOverview({ payouts }: { payouts: CreatorPayment[] }) {
+  const totalPaid = payouts
+    .filter((p) => p.status === "completed")
+    .reduce((sum, p) => sum + parseFloat(p.grossAmount), 0);
+
+  const pendingPayouts = payouts.filter((p) => p.status === "pending" || p.status === "processing");
+  const completedPayouts = payouts.filter((p) => p.status === "completed");
+
+  return (
+    <div className="space-y-6">
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+        <div className="rounded-xl border-2 border-gray-200 bg-white p-6">
+          <div className="flex items-center gap-3">
+            <div className="rounded-lg bg-blue-100 p-3">
+              <DollarSign className="h-6 w-6 text-blue-600" />
+            </div>
+            <div>
+              <p className="text-sm text-gray-600">Total Paid Out</p>
+              <p className="text-2xl font-bold text-gray-900">${totalPaid.toFixed(2)}</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-xl border-2 border-gray-200 bg-white p-6">
+          <div className="flex items-center gap-3">
+            <div className="rounded-lg bg-yellow-100 p-3">
+              <Clock className="h-6 w-6 text-yellow-600" />
+            </div>
+            <div>
+              <p className="text-sm text-gray-600">Pending</p>
+              <p className="text-2xl font-bold text-gray-900">{pendingPayouts.length}</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-xl border-2 border-gray-200 bg-white p-6">
+          <div className="flex items-center gap-3">
+            <div className="rounded-lg bg-green-100 p-3">
+              <CheckCircle className="h-6 w-6 text-green-600" />
+            </div>
+            <div>
+              <p className="text-sm text-gray-600">Completed</p>
+              <p className="text-2xl font-bold text-gray-900">{completedPayouts.length}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Payout History */}
+      <div className="rounded-xl border-2 border-gray-200 bg-white p-6">
+        <div className="mb-6 flex items-center justify-between">
+          <div>
+            <h3 className="text-lg font-bold text-gray-900">Payout History</h3>
+            <p className="mt-1 text-sm text-gray-600">Track payments to creators</p>
+          </div>
+          <Button variant="outline" size="sm">
+            <Download className="mr-2 h-4 w-4" />
+            Export
+          </Button>
+        </div>
+
+        <div className="space-y-4">
+          {payouts.length === 0 ? (
+            <div className="py-12 text-center">
+              <p className="text-gray-500">No payout history yet</p>
+            </div>
+          ) : (
+            payouts.map((payout) => (
+              <div
+                key={payout.id}
+                className="flex flex-col gap-4 rounded-lg border border-gray-200 p-4 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <div className="flex-1">
+                  <p className="font-medium text-gray-900">
+                    {payout.description || `Payment ${payout.id.slice(0, 8)}`}
+                  </p>
+                  <p className="text-sm text-gray-500">
+                    {payout.completedAt
+                      ? new Date(payout.completedAt).toLocaleDateString()
+                      : new Date(payout.createdAt).toLocaleDateString()}
+                  </p>
+                </div>
+                <div className="flex items-center gap-4">
+                  <div className="text-right">
+                    <p className="text-lg font-bold text-gray-900">
+                      ${parseFloat(payout.grossAmount).toFixed(2)}
+                    </p>
+                  </div>
+                  <StatusBadge status={payout.status} />
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AdminPaymentDashboard({
+  creatorPayments,
+  companyPayouts,
+}: {
+  creatorPayments: CreatorPayment[];
+  companyPayouts: CreatorPayment[];
+}) {
+  const allPayments = [...creatorPayments, ...companyPayouts];
+  const totalVolume = allPayments
+    .filter((p) => p.status === "completed")
+    .reduce((sum, p) => sum + parseFloat(p.grossAmount), 0);
+
+  const pendingCount = allPayments.filter((p) => p.status === "pending" || p.status === "processing").length;
+  const completedCount = allPayments.filter((p) => p.status === "completed").length;
+
+  return (
+    <div className="space-y-6">
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-4">
+        <div className="rounded-xl border-2 border-gray-200 bg-white p-6">
+          <div className="flex items-center gap-3">
+            <div className="rounded-lg bg-blue-100 p-3">
+              <DollarSign className="h-6 w-6 text-blue-600" />
+            </div>
+            <div>
+              <p className="text-sm text-gray-600">Total Volume</p>
+              <p className="text-2xl font-bold text-gray-900">${totalVolume.toFixed(2)}</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-xl border-2 border-gray-200 bg-white p-6">
+          <div className="flex items-center gap-3">
+            <div className="rounded-lg bg-yellow-100 p-3">
+              <Clock className="h-6 w-6 text-yellow-600" />
+            </div>
+            <div>
+              <p className="text-sm text-gray-600">Pending</p>
+              <p className="text-2xl font-bold text-gray-900">{pendingCount}</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-xl border-2 border-gray-200 bg-white p-6">
+          <div className="flex items-center gap-3">
+            <div className="rounded-lg bg-green-100 p-3">
+              <CheckCircle className="h-6 w-6 text-green-600" />
+            </div>
+            <div>
+              <p className="text-sm text-gray-600">Completed</p>
+              <p className="text-2xl font-bold text-gray-900">{completedCount}</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-xl border-2 border-gray-200 bg-white p-6">
+          <div className="flex items-center gap-3">
+            <div className="rounded-lg bg-purple-100 p-3">
+              <Users className="h-6 w-6 text-purple-600" />
+            </div>
+            <div>
+              <p className="text-sm text-gray-600">Total Payments</p>
+              <p className="text-2xl font-bold text-gray-900">{allPayments.length}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* All Payments */}
+      <div className="rounded-xl border-2 border-gray-200 bg-white p-6">
+        <div className="mb-6 flex items-center justify-between">
+          <div>
+            <h3 className="text-lg font-bold text-gray-900">All Platform Payments</h3>
+            <p className="mt-1 text-sm text-gray-600">Monitor all transactions across the platform</p>
+          </div>
+          <Button variant="outline" size="sm">
+            <Download className="mr-2 h-4 w-4" />
+            Export
+          </Button>
+        </div>
+
+        <div className="space-y-4">
+          {allPayments.length === 0 ? (
+            <div className="py-12 text-center">
+              <p className="text-gray-500">No payment data available</p>
+            </div>
+          ) : (
+            allPayments.map((payment) => (
+              <div
+                key={payment.id}
+                className="flex flex-col gap-4 rounded-lg border border-gray-200 p-4 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <div className="flex-1">
+                  <p className="font-medium text-gray-900">
+                    {payment.description || `Payment ${payment.id.slice(0, 8)}`}
+                  </p>
+                  <p className="text-sm text-gray-500">
+                    {payment.completedAt
+                      ? new Date(payment.completedAt).toLocaleDateString()
+                      : new Date(payment.createdAt).toLocaleDateString()}
+                  </p>
+                  <div className="mt-2 flex items-center gap-4 text-sm text-gray-600">
+                    <span>Gross: ${parseFloat(payment.grossAmount).toFixed(2)}</span>
+                    <span>Net: ${parseFloat(payment.netAmount).toFixed(2)}</span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-4">
+                  <StatusBadge status={payment.status} />
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function AdminPaymentSettings() {
   const [settlementSchedule, setSettlementSchedule] = useState("weekly");
@@ -255,6 +652,31 @@ function AdminPaymentSettings() {
   const [notificationEmail, setNotificationEmail] = useState("finance@creatorlink.com");
   const [escalationEmail, setEscalationEmail] = useState("compliance@creatorlink.com");
   const [includeReports, setIncludeReports] = useState(true);
+
+  const adminFundingMethods: AdminFundingMethod[] = [
+    {
+      id: 1,
+      name: "Primary Operating Account",
+      type: "bank",
+      last4: "4321",
+      status: "active",
+      isPrimary: true,
+    },
+    {
+      id: 2,
+      name: "Reserve Treasury Wallet",
+      type: "wallet",
+      last4: "9fae",
+      status: "active",
+    },
+    {
+      id: 3,
+      name: "Backup Settlement Card",
+      type: "card",
+      last4: "7788",
+      status: "pending",
+    },
+  ];
 
   const typeLabels: Record<AdminFundingMethod["type"], string> = {
     bank: "Bank Account",
@@ -489,9 +911,26 @@ export default function PaymentSettings() {
     }
   }, [user?.role]);
 
+  // Fetch payment methods
   const { data: paymentMethods } = useQuery<PaymentMethod[]>({
     queryKey: ["/api/payment-settings"],
     enabled: isAuthenticated,
+  });
+
+  // Fetch payments based on user role
+  const { data: creatorPayments = [] } = useQuery<CreatorPayment[]>({
+    queryKey: ["/api/payments/creator"],
+    enabled: isAuthenticated && user?.role === "creator",
+  });
+
+  const { data: companyPayments = [] } = useQuery<CreatorPayment[]>({
+    queryKey: ["/api/payments/company"],
+    enabled: isAuthenticated && user?.role === "company",
+  });
+
+  const { data: allPayments = [] } = useQuery<CreatorPayment[]>({
+    queryKey: ["/api/payments/all"],
+    enabled: isAuthenticated && user?.role === "admin",
   });
 
   const addPaymentMethodMutation = useMutation({
@@ -641,14 +1080,16 @@ export default function PaymentSettings() {
                   }`}
                 >
                   Pending Approvals
-                  <span className="ml-2 inline-flex items-center rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-bold text-yellow-800">
-                    {companyPayouts.filter((payout) => payout.status === "pending_approval").length}
-                  </span>
+                  {companyPayments.filter((p) => p.status === "pending" || p.status === "processing").length > 0 && (
+                    <span className="ml-2 inline-flex items-center rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-bold text-yellow-800">
+                      {companyPayments.filter((p) => p.status === "pending" || p.status === "processing").length}
+                    </span>
+                  )}
                 </button>
               </div>
             </div>
-            {activeTab === "overview" && <CompanyOverview payouts={companyPayouts} />}
-            {activeTab === "approvals" && <CompanyPayoutApproval payouts={companyPayouts} />}
+            {activeTab === "overview" && <CompanyOverview payouts={companyPayments} />}
+            {activeTab === "approvals" && <CompanyPayoutApproval payouts={companyPayments} />}
           </>
         )}
 
@@ -679,7 +1120,7 @@ export default function PaymentSettings() {
               </div>
             </div>
             {activeTab === "dashboard" && (
-              <AdminPaymentDashboard creatorPayments={creatorPayments} companyPayouts={companyPayouts} />
+              <AdminPaymentDashboard creatorPayments={allPayments} companyPayouts={allPayments} />
             )}
             {activeTab === "settings" && <AdminPaymentSettings />}
           </>

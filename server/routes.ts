@@ -665,6 +665,61 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Payment routes for creators
+  app.get("/api/payments/creator", requireAuth, requireRole('creator'), async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const payments = await storage.getPaymentsByCreator(userId);
+      res.json(payments);
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  // Payment routes for companies
+  app.get("/api/payments/company", requireAuth, requireRole('company'), async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const companyProfile = await storage.getCompanyProfile(userId);
+
+      if (!companyProfile) {
+        return res.status(404).send("Company profile not found");
+      }
+
+      const payments = await storage.getPaymentsByCompany(companyProfile.id);
+      res.json(payments);
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  // Payment routes for admins
+  app.get("/api/payments/all", requireAuth, requireRole('admin'), async (req, res) => {
+    try {
+      const payments = await storage.getAllPayments();
+      res.json(payments);
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  // Update payment status (admin only)
+  app.patch("/api/payments/:id/status", requireAuth, requireRole('admin'), async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { status } = req.body;
+
+      if (!status) {
+        return res.status(400).send("Status is required");
+      }
+
+      const payment = await storage.updatePaymentStatus(id, status);
+      res.json(payment);
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
   // Company routes
   app.get("/api/company/offers", requireAuth, requireRole('company'), async (req, res) => {
     try {
