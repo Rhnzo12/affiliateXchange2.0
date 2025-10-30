@@ -86,6 +86,12 @@ export default function OfferDetail() {
     enabled: isAuthenticated,
   });
 
+  // Fetch reviews for this offer
+  const { data: reviews, isLoading: reviewsLoading } = useQuery<any[]>({
+    queryKey: [`/api/offers/${offerId}/reviews`],
+    enabled: !!offerId,
+  });
+
   // Find if there's an existing application for this offer
   const existingApplication = applications?.find(
     app => app.offer?.id === offerId || app.offerId === offerId

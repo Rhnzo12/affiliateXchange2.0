@@ -149,6 +149,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get reviews for an offer (public endpoint)
+  app.get("/api/offers/:id/reviews", async (req, res) => {
+    try {
+      const offer = await storage.getOffer(req.params.id);
+      if (!offer) {
+        return res.status(404).send("Offer not found");
+      }
+
+      // Get reviews for the company that owns this offer
+      const reviews = await storage.getReviewsByCompany(offer.companyId);
+
+      // Filter out hidden reviews for non-admin users
+      const visibleReviews = reviews.filter(review => !review.isHidden);
+
+      res.json(visibleReviews);
+    } catch (error: any) {
+      console.error('[Reviews] Error fetching offer reviews:', error);
+      res.status(500).send(error.message);
+    }
+  });
+
   app.post("/api/offers", requireAuth, requireRole('company'), async (req, res) => {
     try {
       const userId = (req.user as any).id;
@@ -235,7 +256,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Generate tracking link and code
       const trackingCode = `CR-${application.creatorId.substring(0, 8)}-${application.offerId.substring(0, 8)}`;
-      const trackingLink = `https://example.com/track/${trackingCode}`;
+      const trackingLink = `https://example.com/go/${trackingCode}`;
 
       const approved = await storage.approveApplication(
         application.id,
@@ -397,7 +418,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Tracking & Redirect System
-  app.get("/track/:code", async (req, res) => {
+  app.get("/go/:code", async (req, res) => {
     try {
       const trackingCode = req.params.code;
       
@@ -1147,6 +1168,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.get("/objects/:objectPath(*)", requireAuth, async (req, res) => {
+    console.log("🔍 Requested object path:", req.path);
     const userId = (req.user as any)?.id;
     const objectStorageService = new ObjectStorageService();
     try {
@@ -1158,7 +1180,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!canAccess) {
         return res.sendStatus(401);
       }
-      objectStorageService.downloadObject(objectFile, res);
+      const publicId = req.path.replace("/objects/", "");
+      objectStorageService.downloadObject(publicId, res);
     } catch (error) {
       console.error("Error checking object access:", error);
       if (error instanceof ObjectNotFoundError) {
@@ -1732,7 +1755,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (now >= scheduledTime) {
             try {
               const trackingCode = `CR-${application.creatorId.substring(0, 8)}-${application.offerId.substring(0, 8)}-${Date.now()}`;
-              const trackingLink = `https://${process.env.REPLIT_DEV_DOMAIN || 'localhost:5000'}/track/${trackingCode}`;
+              const trackingLink = `https://${process.env.REPLIT_DEV_DOMAIN || 'localhost:5000'}/go/${trackingCode}`;
               
               await storage.approveApplication(
                 application.id,
