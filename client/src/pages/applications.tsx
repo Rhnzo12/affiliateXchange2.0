@@ -155,18 +155,44 @@ export default function Applications() {
     });
   };
 
+  const getExistingReview = (applicationId: string) => {
+    return userReviews.find((review: any) => review.applicationId === applicationId);
+  };
+
+  const hasReview = (applicationId: string) => {
+    return userReviews.some((review: any) => review.applicationId === applicationId);
+  };
+
   const handleOpenReviewDialog = (application: any) => {
+    const existingReview = getExistingReview(application.id);
+
     setReviewDialog({ open: true, application });
-    setReviewForm({
-      applicationId: application.id,
-      companyId: application.offer?.companyId || "",
-      reviewText: "",
-      overallRating: 0,
-      paymentSpeedRating: 0,
-      communicationRating: 0,
-      offerQualityRating: 0,
-      supportRating: 0,
-    });
+
+    if (existingReview) {
+      // Editing existing review
+      setReviewForm({
+        applicationId: application.id,
+        companyId: application.offer?.companyId || "",
+        reviewText: existingReview.reviewText || "",
+        overallRating: existingReview.overallRating || 0,
+        paymentSpeedRating: existingReview.paymentSpeedRating || 0,
+        communicationRating: existingReview.communicationRating || 0,
+        offerQualityRating: existingReview.offerQualityRating || 0,
+        supportRating: existingReview.supportRating || 0,
+      });
+    } else {
+      // New review
+      setReviewForm({
+        applicationId: application.id,
+        companyId: application.offer?.companyId || "",
+        reviewText: "",
+        overallRating: 0,
+        paymentSpeedRating: 0,
+        communicationRating: 0,
+        offerQualityRating: 0,
+        supportRating: 0,
+      });
+    }
   };
 
   const handleSubmitReview = () => {
@@ -180,10 +206,6 @@ export default function Applications() {
     }
 
     submitReviewMutation.mutate(reviewForm);
-  };
-
-  const hasReview = (applicationId: string) => {
-    return userReviews.some((review: any) => review.applicationId === applicationId);
   };
 
   const filteredApplications = applications?.filter(app => {
@@ -237,7 +259,8 @@ export default function Applications() {
           ) : (
             filteredApplications.map((application: any) => {
               const StatusIcon = STATUS_COLORS[application.status]?.icon || Clock;
-              const canReview = (application.status === 'approved' || application.status === 'active') && !hasReview(application.id);
+              const canShowReviewButton = application.status === 'approved' || application.status === 'active';
+              const existingReview = getExistingReview(application.id);
 
               return (
                 <Card key={application.id} className="border-card-border hover-elevate" data-testid={`application-${application.id}`}>
@@ -341,23 +364,17 @@ export default function Applications() {
                               View Offer
                             </Button>
                           </Link>
-                          {canReview && (
+                          {canShowReviewButton && (
                             <Button
                               size="sm"
-                              variant="default"
+                              variant={existingReview ? "outline" : "default"}
                               onClick={() => handleOpenReviewDialog(application)}
                               data-testid={`button-review-${application.id}`}
                               className="gap-2"
                             >
                               <Star className="h-4 w-4" />
-                              Leave Review
+                              {existingReview ? "Edit Review" : "Leave Review"}
                             </Button>
-                          )}
-                          {hasReview(application.id) && (
-                            <Badge variant="secondary" className="gap-1">
-                              <CheckCircle2 className="h-3 w-3" />
-                              Reviewed
-                            </Badge>
                           )}
                         </div>
                       </div>
@@ -374,7 +391,9 @@ export default function Applications() {
       <Dialog open={reviewDialog.open} onOpenChange={(open) => setReviewDialog({ ...reviewDialog, open })}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Leave a Review</DialogTitle>
+            <DialogTitle>
+              {getExistingReview(reviewDialog.application?.id) ? "Edit Review" : "Leave a Review"}
+            </DialogTitle>
             <DialogDescription>
               Share your experience working with {reviewDialog.application?.offer?.company?.tradeName || "this company"}
             </DialogDescription>
