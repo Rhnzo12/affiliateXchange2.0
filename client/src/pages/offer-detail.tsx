@@ -86,6 +86,12 @@ export default function OfferDetail() {
     enabled: isAuthenticated,
   });
 
+  // Fetch reviews for this offer
+  const { data: reviews, isLoading: reviewsLoading } = useQuery<any[]>({
+    queryKey: [`/api/offers/${offerId}/reviews`],
+    enabled: !!offerId,
+  });
+
   // Find if there's an existing application for this offer
   const existingApplication = applications?.find(
     app => app.offer?.id === offerId || app.offerId === offerId
@@ -427,11 +433,139 @@ export default function OfferDetail() {
               <CardTitle>Creator Reviews</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-center py-12">
-                <Star className="h-12 w-12 text-muted-foreground/50 mx-auto mb-4" />
-                <p className="text-muted-foreground">No reviews yet</p>
-                <p className="text-sm text-muted-foreground mt-1">Be the first to work with this offer and leave a review</p>
-              </div>
+              {reviewsLoading ? (
+                <div className="text-center py-12">
+                  <p className="text-muted-foreground">Loading reviews...</p>
+                </div>
+              ) : !reviews || reviews.length === 0 ? (
+                <div className="text-center py-12">
+                  <Star className="h-12 w-12 text-muted-foreground/50 mx-auto mb-4" />
+                  <p className="text-muted-foreground">No reviews yet</p>
+                  <p className="text-sm text-muted-foreground mt-1">Be the first to work with this offer and leave a review</p>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {reviews.map((review: any) => (
+                    <div key={review.id} className="border-b pb-6 last:border-0">
+                      <div className="flex items-start justify-between mb-3">
+                        <div>
+                          <div className="flex items-center gap-2 mb-2">
+                            <div className="flex">
+                              {[1, 2, 3, 4, 5].map((star) => (
+                                <Star
+                                  key={star}
+                                  className={`h-4 w-4 ${
+                                    star <= review.overallRating
+                                      ? "fill-yellow-400 text-yellow-400"
+                                      : "text-gray-300"
+                                  }`}
+                                />
+                              ))}
+                            </div>
+                            <span className="text-sm font-medium">{review.overallRating}/5</span>
+                          </div>
+                          <p className="text-sm text-muted-foreground">
+                            {new Date(review.createdAt).toLocaleDateString('en-US', {
+                              year: 'numeric',
+                              month: 'long',
+                              day: 'numeric',
+                            })}
+                          </p>
+                        </div>
+                      </div>
+
+                      {review.reviewText && (
+                        <p className="text-sm mb-4">{review.reviewText}</p>
+                      )}
+
+                      {/* Rating breakdown */}
+                      <div className="grid grid-cols-2 gap-3 text-sm">
+                        {review.paymentSpeedRating && (
+                          <div className="flex items-center justify-between">
+                            <span className="text-muted-foreground">Payment Speed</span>
+                            <div className="flex items-center gap-1">
+                              {[1, 2, 3, 4, 5].map((star) => (
+                                <Star
+                                  key={star}
+                                  className={`h-3 w-3 ${
+                                    star <= review.paymentSpeedRating
+                                      ? "fill-yellow-400 text-yellow-400"
+                                      : "text-gray-300"
+                                  }`}
+                                />
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {review.communicationRating && (
+                          <div className="flex items-center justify-between">
+                            <span className="text-muted-foreground">Communication</span>
+                            <div className="flex items-center gap-1">
+                              {[1, 2, 3, 4, 5].map((star) => (
+                                <Star
+                                  key={star}
+                                  className={`h-3 w-3 ${
+                                    star <= review.communicationRating
+                                      ? "fill-yellow-400 text-yellow-400"
+                                      : "text-gray-300"
+                                  }`}
+                                />
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {review.offerQualityRating && (
+                          <div className="flex items-center justify-between">
+                            <span className="text-muted-foreground">Offer Quality</span>
+                            <div className="flex items-center gap-1">
+                              {[1, 2, 3, 4, 5].map((star) => (
+                                <Star
+                                  key={star}
+                                  className={`h-3 w-3 ${
+                                    star <= review.offerQualityRating
+                                      ? "fill-yellow-400 text-yellow-400"
+                                      : "text-gray-300"
+                                  }`}
+                                />
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {review.supportRating && (
+                          <div className="flex items-center justify-between">
+                            <span className="text-muted-foreground">Support</span>
+                            <div className="flex items-center gap-1">
+                              {[1, 2, 3, 4, 5].map((star) => (
+                                <Star
+                                  key={star}
+                                  className={`h-3 w-3 ${
+                                    star <= review.supportRating
+                                      ? "fill-yellow-400 text-yellow-400"
+                                      : "text-gray-300"
+                                  }`}
+                                />
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Company response */}
+                      {review.companyResponse && (
+                        <div className="mt-4 bg-muted/50 rounded-lg p-4">
+                          <p className="text-sm font-medium mb-2">Company Response</p>
+                          <p className="text-sm text-muted-foreground">{review.companyResponse}</p>
+                          {review.respondedAt && (
+                            <p className="text-xs text-muted-foreground mt-2">
+                              Responded on {new Date(review.respondedAt).toLocaleDateString()}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
