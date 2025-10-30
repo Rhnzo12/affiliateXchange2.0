@@ -149,6 +149,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get reviews for an offer (public endpoint)
+  app.get("/api/offers/:id/reviews", async (req, res) => {
+    try {
+      const offer = await storage.getOffer(req.params.id);
+      if (!offer) {
+        return res.status(404).send("Offer not found");
+      }
+
+      // Get reviews for the company that owns this offer
+      const reviews = await storage.getReviewsByCompany(offer.companyId);
+
+      // Filter out hidden reviews for non-admin users
+      const visibleReviews = reviews.filter(review => !review.isHidden);
+
+      res.json(visibleReviews);
+    } catch (error: any) {
+      console.error('[Reviews] Error fetching offer reviews:', error);
+      res.status(500).send(error.message);
+    }
+  });
+
   app.post("/api/offers", requireAuth, requireRole('company'), async (req, res) => {
     try {
       const userId = (req.user as any).id;
