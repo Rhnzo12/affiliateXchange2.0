@@ -639,6 +639,75 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get reviews by creator (creator only)
+  app.get("/api/user/reviews", requireAuth, requireRole('creator'), async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const reviews = await storage.getReviewsByCreator(userId);
+      res.json(reviews);
+    } catch (error: any) {
+      console.error('[Reviews] Error fetching creator reviews:', error);
+      res.status(500).send(error.message);
+    }
+  });
+
+  // Get reviews for a company (company only)
+  app.get("/api/company/reviews", requireAuth, requireRole('company'), async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const companyProfile = await storage.getCompanyProfileByUserId(userId);
+
+      if (!companyProfile) {
+        return res.status(404).send("Company profile not found");
+      }
+
+      const reviews = await storage.getReviewsByCompany(companyProfile.id);
+      res.json(reviews);
+    } catch (error: any) {
+      console.error('[Reviews] Error fetching company reviews:', error);
+      res.status(500).send(error.message);
+    }
+  });
+
+  // Add company response to a review (company only)
+  app.patch("/api/reviews/:id/respond", requireAuth, requireRole('company'), async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const reviewId = req.params.id;
+      const { response } = req.body;
+
+      if (!response || typeof response !== 'string' || response.trim().length === 0) {
+        return res.status(400).send("Response text is required");
+      }
+
+      const companyProfile = await storage.getCompanyProfileByUserId(userId);
+      if (!companyProfile) {
+        return res.status(404).send("Company profile not found");
+      }
+
+      // Verify the review belongs to this company
+      const review = await storage.getReview(reviewId);
+      if (!review) {
+        return res.status(404).send("Review not found");
+      }
+
+      if (review.companyId !== companyProfile.id) {
+        return res.status(403).send("You can only respond to reviews for your company");
+      }
+
+      // Update the review with company response
+      const updatedReview = await storage.updateReview(reviewId, {
+        companyResponse: response.trim(),
+        companyRespondedAt: new Date(),
+      });
+
+      res.json(updatedReview);
+    } catch (error: any) {
+      console.error('[Reviews] Error adding company response:', error);
+      res.status(500).send(error.message);
+    }
+  });
+
   // Payment Settings routes
   app.get("/api/payment-settings", requireAuth, async (req, res) => {
     try {

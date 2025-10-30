@@ -1,12 +1,15 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Copy, ExternalLink, MessageSquare, TrendingUp, FileText, Clock, CheckCircle2 } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Copy, ExternalLink, MessageSquare, TrendingUp, FileText, Clock, CheckCircle2, Star, StarOff } from "lucide-react";
 import { Link } from "wouter";
 
 const STATUS_COLORS: Record<string, any> = {
@@ -19,7 +22,7 @@ const STATUS_COLORS: Record<string, any> = {
 // Helper function to format commission display
 const formatCommission = (offer: any) => {
   if (!offer) return "$0";
-  
+
   if (offer.commissionAmount) {
     return `$${offer.commissionAmount}`;
   } else if (offer.commissionPercentage) {
@@ -30,10 +33,59 @@ const formatCommission = (offer: any) => {
   return "$0";
 };
 
+interface ReviewFormData {
+  applicationId: string;
+  companyId: string;
+  reviewText: string;
+  overallRating: number;
+  paymentSpeedRating: number;
+  communicationRating: number;
+  offerQualityRating: number;
+  supportRating: number;
+}
+
+const StarRating = ({ rating, onRatingChange }: { rating: number; onRatingChange: (rating: number) => void }) => {
+  return (
+    <div className="flex gap-1">
+      {[1, 2, 3, 4, 5].map((star) => (
+        <button
+          key={star}
+          type="button"
+          onClick={() => onRatingChange(star)}
+          className="focus:outline-none"
+        >
+          <Star
+            className={`h-6 w-6 cursor-pointer transition-colors ${
+              star <= rating
+                ? "fill-yellow-400 text-yellow-400"
+                : "text-gray-300 hover:text-yellow-200"
+            }`}
+          />
+        </button>
+      ))}
+    </div>
+  );
+};
+
 export default function Applications() {
   const { toast } = useToast();
   const { isAuthenticated, isLoading } = useAuth();
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState("all");
+  const [reviewDialog, setReviewDialog] = useState<{ open: boolean; application: any | null }>({
+    open: false,
+    application: null,
+  });
+  const [reviewForm, setReviewForm] = useState<ReviewFormData>({
+    applicationId: "",
+    companyId: "",
+    reviewText: "",
+    overallRating: 0,
+    paymentSpeedRating: 0,
+    communicationRating: 0,
+    offerQualityRating: 0,
+    supportRating: 0,
+  });
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -46,12 +98,92 @@ export default function Applications() {
     enabled: isAuthenticated,
   });
 
+  // Fetch user's reviews to check which applications have been reviewed
+  const { data: userReviews = [] } = useQuery<any[]>({
+    queryKey: ["/api/user/reviews"],
+    enabled: isAuthenticated,
+  });
+
+  const submitReviewMutation = useMutation({
+    mutationFn: async (reviewData: ReviewFormData) => {
+      const res = await fetch("/api/reviews", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(reviewData),
+      });
+
+      if (!res.ok) {
+        const error = await res.text();
+        throw new Error(error || "Failed to submit review");
+      }
+
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/user/reviews"] });
+      toast({
+        title: "Review submitted",
+        description: "Thank you for your feedback!",
+      });
+      setReviewDialog({ open: false, application: null });
+      setReviewForm({
+        applicationId: "",
+        companyId: "",
+        reviewText: "",
+        overallRating: 0,
+        paymentSpeedRating: 0,
+        communicationRating: 0,
+        offerQualityRating: 0,
+        supportRating: 0,
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   const copyTrackingLink = (link: string) => {
     navigator.clipboard.writeText(link);
     toast({
       title: "Copied!",
       description: "Tracking link copied to clipboard",
     });
+  };
+
+  const handleOpenReviewDialog = (application: any) => {
+    setReviewDialog({ open: true, application });
+    setReviewForm({
+      applicationId: application.id,
+      companyId: application.offer?.companyId || "",
+      reviewText: "",
+      overallRating: 0,
+      paymentSpeedRating: 0,
+      communicationRating: 0,
+      offerQualityRating: 0,
+      supportRating: 0,
+    });
+  };
+
+  const handleSubmitReview = () => {
+    if (reviewForm.overallRating === 0) {
+      toast({
+        title: "Error",
+        description: "Please provide an overall rating",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    submitReviewMutation.mutate(reviewForm);
+  };
+
+  const hasReview = (applicationId: string) => {
+    return userReviews.some((review: any) => review.applicationId === applicationId);
   };
 
   const filteredApplications = applications?.filter(app => {
@@ -105,7 +237,8 @@ export default function Applications() {
           ) : (
             filteredApplications.map((application: any) => {
               const StatusIcon = STATUS_COLORS[application.status]?.icon || Clock;
-              
+              const canReview = (application.status === 'approved' || application.status === 'active') && !hasReview(application.id);
+
               return (
                 <Card key={application.id} className="border-card-border hover-elevate" data-testid={`application-${application.id}`}>
                   <CardContent className="p-6">
@@ -208,6 +341,24 @@ export default function Applications() {
                               View Offer
                             </Button>
                           </Link>
+                          {canReview && (
+                            <Button
+                              size="sm"
+                              variant="default"
+                              onClick={() => handleOpenReviewDialog(application)}
+                              data-testid={`button-review-${application.id}`}
+                              className="gap-2"
+                            >
+                              <Star className="h-4 w-4" />
+                              Leave Review
+                            </Button>
+                          )}
+                          {hasReview(application.id) && (
+                            <Badge variant="secondary" className="gap-1">
+                              <CheckCircle2 className="h-3 w-3" />
+                              Reviewed
+                            </Badge>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -218,6 +369,93 @@ export default function Applications() {
           )}
         </TabsContent>
       </Tabs>
+
+      {/* Review Dialog */}
+      <Dialog open={reviewDialog.open} onOpenChange={(open) => setReviewDialog({ ...reviewDialog, open })}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Leave a Review</DialogTitle>
+            <DialogDescription>
+              Share your experience working with {reviewDialog.application?.offer?.company?.tradeName || "this company"}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-6">
+            {/* Overall Rating */}
+            <div className="space-y-2">
+              <Label className="text-base">Overall Rating *</Label>
+              <StarRating
+                rating={reviewForm.overallRating}
+                onRatingChange={(rating) => setReviewForm({ ...reviewForm, overallRating: rating })}
+              />
+            </div>
+
+            {/* Review Text */}
+            <div className="space-y-2">
+              <Label htmlFor="reviewText" className="text-base">Your Review</Label>
+              <Textarea
+                id="reviewText"
+                placeholder="Share your experience working with this company..."
+                value={reviewForm.reviewText}
+                onChange={(e) => setReviewForm({ ...reviewForm, reviewText: e.target.value })}
+                rows={4}
+                className="resize-none"
+              />
+            </div>
+
+            {/* Detailed Ratings */}
+            <div className="space-y-4 border-t pt-4">
+              <h4 className="font-medium">Detailed Ratings (Optional)</h4>
+
+              <div className="space-y-2">
+                <Label>Payment Speed</Label>
+                <StarRating
+                  rating={reviewForm.paymentSpeedRating}
+                  onRatingChange={(rating) => setReviewForm({ ...reviewForm, paymentSpeedRating: rating })}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Communication</Label>
+                <StarRating
+                  rating={reviewForm.communicationRating}
+                  onRatingChange={(rating) => setReviewForm({ ...reviewForm, communicationRating: rating })}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Offer Quality</Label>
+                <StarRating
+                  rating={reviewForm.offerQualityRating}
+                  onRatingChange={(rating) => setReviewForm({ ...reviewForm, offerQualityRating: rating })}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Support</Label>
+                <StarRating
+                  rating={reviewForm.supportRating}
+                  onRatingChange={(rating) => setReviewForm({ ...reviewForm, supportRating: rating })}
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 border-t pt-4">
+              <Button
+                variant="outline"
+                onClick={() => setReviewDialog({ open: false, application: null })}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleSubmitReview}
+                disabled={submitReviewMutation.isPending || reviewForm.overallRating === 0}
+              >
+                {submitReviewMutation.isPending ? "Submitting..." : "Submit Review"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
