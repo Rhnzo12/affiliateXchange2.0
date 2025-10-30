@@ -1671,7 +1671,7 @@ export class DatabaseStorage implements IStorage {
     today.setHours(0, 0, 0, 0);
 
     const uniqueIpsToday = await db
-      // @ts-expect-error drizzle has selectDistinct in some dialects; adjust if needed
+      
       .selectDistinct({ ipAddress: clickEvents.ipAddress })
       .from(clickEvents)
       .where(and(eq(clickEvents.applicationId, applicationId), sql`${clickEvents.timestamp}::date = ${today}::date`));
