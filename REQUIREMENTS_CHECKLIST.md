@@ -18,7 +18,7 @@
 | Affiliate marketplace connecting creators with brands | ✅ | Fully operational with browse, apply, track workflow |
 | Support for video creators (YouTube, TikTok, Instagram) | ✅ | Creator profiles include all three platforms |
 | Commission-based revenue model | ✅ | Multiple commission types: per_sale, per_lead, per_click, monthly_retainer, hybrid |
-| Platform fee structure (7% total: 4% platform + 3% processing) | ⚠️ | Payment schema has platformFeeAmount & stripeFeeAmount fields but calculation logic needs verification |
+| Platform fee structure (7% total: 4% platform + 3% processing) | ✅ | Implemented in storage.ts:1794-1810 with proper 4% + 3% fee calculation |
 
 ---
 
@@ -267,8 +267,8 @@
 | Payment method CRUD | ✅ | GET/POST /api/payment-settings |
 | Tax information storage | ✅ | taxInfo JSONB field in paymentSettings |
 | Payment record creation | ✅ | payments table with all fee breakdowns |
-| Platform fee calculation (4%) | ⚠️ | Field exists but calculation logic needs verification |
-| Stripe processing fee calculation (3%) | ⚠️ | stripeFeeAmount field exists, integration needs verification |
+| Platform fee calculation (4%) | ✅ | Implemented: platformFee = grossAmount * 0.04 (storage.ts:1795) |
+| Stripe processing fee calculation (3%) | ✅ | Implemented: stripeFee = grossAmount * 0.03 (storage.ts:1796) |
 | Net amount calculation | ✅ | netAmount = grossAmount - platformFee - stripeFee |
 | Payment status workflow (pending→processing→completed→failed→refunded) | ✅ | paymentStatusEnum with all states |
 | Payment history view (creator) | ✅ | GET /api/payments/creator |
@@ -280,11 +280,12 @@
 | Automated retainer payments | ✅ | Auto-created on deliverable approval (routes.ts:1486-1509) |
 | Payment notifications | ✅ | SendGrid email notifications integrated |
 
-**Payment System Score:** ✅ 14/16, ⚠️ 2/16
+**Payment System Score:** ✅ 16/16 **fully implemented**
 
 📝 **Recommendation:**
-- Verify Stripe integration with actual fee calculations (7% total: 4% platform + 3% Stripe)
+- ✅ **COMPLETED:** Fee calculations now properly implemented (4% + 3% = 7% total)
 - Add Stripe webhook handlers for payment status updates
+- Test fee calculations with real Stripe transactions
 
 ---
 
@@ -934,7 +935,7 @@
 | **Database Schema** | 19/19 tables | - | - | ✅ **100%** |
 | **API Endpoints** | 77/77 | - | - | ✅ **100%** |
 | **Pages/UI** | 27/27 | - | - | ✅ **100%** |
-| **Core Features** | 95/109 | 11/109 | 3/109 | ✅ **87%** ⚠️ **10%** ❌ **3%** |
+| **Core Features** | 97/109 | 9/109 | 3/109 | ✅ **89%** ⚠️ **8%** ❌ **3%** |
 | **Security** | 10/14 | 3/14 | 1/14 | ✅ **71%** ⚠️ **21%** ❌ **7%** |
 | **Compliance** | 1/6 | 1/6 | 4/6 | ❌ **67% Missing** |
 | **Testing** | 0/4 | 0/4 | 4/4 | ❌ **0% Coverage** |
@@ -945,7 +946,7 @@
 
 ### Project Health Score
 
-**✅ Excellent:** Core marketplace functionality (87/100)
+**✅ Excellent:** Core marketplace functionality (89/100)
 **⚠️ Needs Attention:** Performance & deployment (60/100)
 **❌ Critical Gaps:** Testing (0/100), Compliance (33/100)
 

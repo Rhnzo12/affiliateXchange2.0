@@ -1791,23 +1791,26 @@ export class DatabaseStorage implements IStorage {
       });
     }
 
+    // Calculate fees according to spec: 7% total (4% platform + 3% Stripe)
+    const platformFee = earnings * 0.04; // 4% platform fee
+    const stripeFee = earnings * 0.03;   // 3% Stripe processing fee
+    const netAmount = earnings - platformFee - stripeFee;
+
     await this.createPayment({
       applicationId: applicationId,
       creatorId: application.creatorId,
       companyId: offer.companyId,
       offerId: application.offerId,
       grossAmount: earnings.toFixed(2),
-      platformFeeAmount: "0",
-      stripeFeeAmount: "0",
-      netAmount: earnings.toFixed(2),
+      platformFeeAmount: platformFee.toFixed(2),
+      stripeFeeAmount: stripeFee.toFixed(2),
+      netAmount: netAmount.toFixed(2),
       status: "pending",
       description: `Commission for ${offer.commissionType} conversion`,
     });
 
     console.log(
-      `[Conversion] Recorded conversion for application ${applicationId} - Earnings: $${earnings.toFixed(
-        2,
-      )}`,
+      `[Conversion] Recorded conversion for application ${applicationId} - Gross: $${earnings.toFixed(2)}, Platform Fee (4%): $${platformFee.toFixed(2)}, Stripe Fee (3%): $${stripeFee.toFixed(2)}, Net: $${netAmount.toFixed(2)}`,
     );
   }
 
