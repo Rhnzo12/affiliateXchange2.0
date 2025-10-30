@@ -1,16 +1,24 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Star, MessageSquare } from "lucide-react";
+import { Star, MessageSquare, Reply } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
 export default function CompanyReviews() {
   const { toast } = useToast();
   const { isAuthenticated, isLoading } = useAuth();
+  const queryClient = useQueryClient();
+  const [responseDialog, setResponseDialog] = useState<{ open: boolean; reviewId: string | null; response: string }>({
+    open: false,
+    reviewId: null,
+    response: "",
+  });
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -25,20 +33,63 @@ export default function CompanyReviews() {
     }
   }, [isAuthenticated, isLoading, toast]);
 
-  const { data: offers = [] } = useQuery<any[]>({
-    queryKey: ["/api/offers"],
+  const { data: companyReviews = [], isLoading: loadingReviews } = useQuery<any[]>({
+    queryKey: ["/api/company/reviews"],
     enabled: isAuthenticated,
   });
 
-  const { data: reviews = [], isLoading: loadingReviews } = useQuery<any[]>({
-    queryKey: ["/api/reviews"],
-    enabled: isAuthenticated,
+  const submitResponseMutation = useMutation({
+    mutationFn: async ({ reviewId, response }: { reviewId: string; response: string }) => {
+      const res = await fetch(`/api/reviews/${reviewId}/respond`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ response }),
+      });
+
+      if (!res.ok) {
+        const error = await res.text();
+        throw new Error(error || "Failed to submit response");
+      }
+
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/company/reviews"] });
+      toast({
+        title: "Response submitted",
+        description: "Your response has been posted successfully",
+      });
+      setResponseDialog({ open: false, reviewId: null, response: "" });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
   });
 
-  // Filter reviews for this company's offers
-  const companyReviews = reviews.filter((review: any) => 
-    offers.some((offer: any) => offer.id === review.offerId)
-  );
+  const handleOpenResponseDialog = (reviewId: string) => {
+    setResponseDialog({ open: true, reviewId, response: "" });
+  };
+
+  const handleSubmitResponse = () => {
+    if (!responseDialog.reviewId || !responseDialog.response.trim()) {
+      toast({
+        title: "Error",
+        description: "Please enter a response",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    submitResponseMutation.mutate({
+      reviewId: responseDialog.reviewId,
+      response: responseDialog.response.trim(),
+    });
+  };
 
   const renderStars = (rating: number) => {
     return (
@@ -58,7 +109,7 @@ export default function CompanyReviews() {
   };
 
   const averageRating = companyReviews.length > 0
-    ? (companyReviews.reduce((sum: number, r: any) => sum + r.rating, 0) / companyReviews.length).toFixed(1)
+    ? (companyReviews.reduce((sum: number, r: any) => sum + r.overallRating, 0) / companyReviews.length).toFixed(1)
     : '0.0';
 
   if (isLoading) {
@@ -101,7 +152,7 @@ export default function CompanyReviews() {
             <CardContent>
               <div className="text-2xl font-bold">{companyReviews.length}</div>
               <p className="text-xs text-muted-foreground mt-1">
-                Across {offers.length} {offers.length === 1 ? 'offer' : 'offers'}
+                From creators who worked with you
               </p>
             </CardContent>
           </Card>
@@ -113,11 +164,11 @@ export default function CompanyReviews() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                {companyReviews.filter((r: any) => r.rating === 5).length}
+                {companyReviews.filter((r: any) => r.overallRating === 5).length}
               </div>
               <p className="text-xs text-muted-foreground mt-1">
                 {companyReviews.length > 0
-                  ? `${Math.round((companyReviews.filter((r: any) => r.rating === 5).length / companyReviews.length) * 100)}%`
+                  ? `${Math.round((companyReviews.filter((r: any) => r.overallRating === 5).length / companyReviews.length) * 100)}%`
                   : '0%'} of total
               </p>
             </CardContent>
@@ -159,34 +210,125 @@ export default function CompanyReviews() {
                         {review.creator?.firstName || 'Creator'}
                       </CardTitle>
                       <p className="text-sm text-muted-foreground">
-                        {review.offer?.title || 'Offer'}
+                        {formatDistanceToNow(new Date(review.createdAt), { addSuffix: true })}
                       </p>
                     </div>
                   </div>
                   <div className="flex flex-col items-end gap-2">
-                    {renderStars(review.rating)}
-                    <span className="text-xs text-muted-foreground">
-                      {formatDistanceToNow(new Date(review.createdAt), { addSuffix: true })}
-                    </span>
+                    {renderStars(review.overallRating)}
                   </div>
                 </div>
               </CardHeader>
               <CardContent>
-                <p className="text-sm">{review.comment}</p>
-                
-                {review.response && (
+                <p className="text-sm mb-4">{review.reviewText}</p>
+
+                {/* Rating breakdown */}
+                <div className="grid grid-cols-2 gap-3 text-sm mb-4">
+                  {review.paymentSpeedRating && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Payment Speed</span>
+                      <div className="flex items-center gap-1">
+                        {[1, 2, 3, 4, 5].map((star) => (
+                          <Star key={star} className={`h-3 w-3 ${star <= review.paymentSpeedRating ? "fill-yellow-400 text-yellow-400" : "text-gray-300"}`} />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {review.communicationRating && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Communication</span>
+                      <div className="flex items-center gap-1">
+                        {[1, 2, 3, 4, 5].map((star) => (
+                          <Star key={star} className={`h-3 w-3 ${star <= review.communicationRating ? "fill-yellow-400 text-yellow-400" : "text-gray-300"}`} />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {review.offerQualityRating && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Offer Quality</span>
+                      <div className="flex items-center gap-1">
+                        {[1, 2, 3, 4, 5].map((star) => (
+                          <Star key={star} className={`h-3 w-3 ${star <= review.offerQualityRating ? "fill-yellow-400 text-yellow-400" : "text-gray-300"}`} />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {review.supportRating && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Support</span>
+                      <div className="flex items-center gap-1">
+                        {[1, 2, 3, 4, 5].map((star) => (
+                          <Star key={star} className={`h-3 w-3 ${star <= review.supportRating ? "fill-yellow-400 text-yellow-400" : "text-gray-300"}`} />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {review.companyResponse ? (
                   <div className="mt-4 p-3 bg-muted/50 rounded-md">
                     <div className="text-xs font-semibold text-muted-foreground mb-1">
                       Your Response
                     </div>
-                    <p className="text-sm">{review.response}</p>
+                    <p className="text-sm">{review.companyResponse}</p>
+                    {review.companyRespondedAt && (
+                      <p className="text-xs text-muted-foreground mt-2">
+                        Responded {formatDistanceToNow(new Date(review.companyRespondedAt), { addSuffix: true })}
+                      </p>
+                    )}
                   </div>
+                ) : (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleOpenResponseDialog(review.id)}
+                    className="mt-2"
+                  >
+                    <Reply className="h-4 w-4 mr-2" />
+                    Respond to Review
+                  </Button>
                 )}
               </CardContent>
             </Card>
           ))}
         </div>
       )}
+
+      {/* Response Dialog */}
+      <Dialog open={responseDialog.open} onOpenChange={(open) => setResponseDialog({ ...responseDialog, open })}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Respond to Review</DialogTitle>
+            <DialogDescription>
+              Write a thoughtful response to this creator's review
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <Textarea
+              placeholder="Thank you for your review..."
+              value={responseDialog.response}
+              onChange={(e) => setResponseDialog({ ...responseDialog, response: e.target.value })}
+              rows={6}
+              className="resize-none"
+            />
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                onClick={() => setResponseDialog({ open: false, reviewId: null, response: "" })}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleSubmitResponse}
+                disabled={submitResponseMutation.isPending || !responseDialog.response.trim()}
+              >
+                {submitResponseMutation.isPending ? "Submitting..." : "Submit Response"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

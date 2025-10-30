@@ -555,9 +555,9 @@ export default function OfferDetail() {
                         <div className="mt-4 bg-muted/50 rounded-lg p-4">
                           <p className="text-sm font-medium mb-2">Company Response</p>
                           <p className="text-sm text-muted-foreground">{review.companyResponse}</p>
-                          {review.respondedAt && (
+                          {review.companyRespondedAt && (
                             <p className="text-xs text-muted-foreground mt-2">
-                              Responded on {new Date(review.respondedAt).toLocaleDateString()}
+                              Responded on {new Date(review.companyRespondedAt).toLocaleDateString()}
                             </p>
                           )}
                         </div>
