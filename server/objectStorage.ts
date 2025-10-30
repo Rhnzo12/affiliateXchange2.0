@@ -35,10 +35,6 @@ export class ObjectStorageService {
     return process.env.CLOUDINARY_UPLOAD_PRESET || "";
   }
 
-  /**
-   * Generate Cloudinary upload signature for client-side uploads
-   * This allows secure direct uploads from the browser
-   */
   async getObjectEntityUploadURL(): Promise<{
     uploadUrl: string;
     uploadPreset?: string;
@@ -51,16 +47,14 @@ export class ObjectStorageService {
     const folder = this.getCloudinaryFolder();
     const uploadPreset = this.getCloudinaryUploadPreset();
 
-    // If upload preset is configured, use unsigned upload (simpler)
     if (uploadPreset) {
       return {
-        uploadUrl: `https://api.cloudinary.com/v1_1/${process.env.CLOUDINARY_CLOUD_NAME}/upload`,
+        uploadUrl: 'https://api.cloudinary.com/v1_1/' + process.env.CLOUDINARY_CLOUD_NAME + '/upload',
         uploadPreset,
         folder,
       };
     }
 
-    // Otherwise, use signed upload (more secure)
     const paramsToSign = {
       timestamp,
       folder,
@@ -72,7 +66,7 @@ export class ObjectStorageService {
     );
 
     return {
-      uploadUrl: `https://api.cloudinary.com/v1_1/${process.env.CLOUDINARY_CLOUD_NAME}/upload`,
+      uploadUrl: 'https://api.cloudinary.com/v1_1/' + process.env.CLOUDINARY_CLOUD_NAME + '/upload',
       signature,
       timestamp,
       apiKey: process.env.CLOUDINARY_API_KEY,
@@ -80,10 +74,6 @@ export class ObjectStorageService {
     };
   }
 
-  /**
-   * Upload a file directly to Cloudinary from server
-   * Used for server-side uploads
-   */
   async uploadFile(
     filePath: string,
     options?: {
@@ -101,9 +91,6 @@ export class ObjectStorageService {
     return await cloudinary.uploader.upload(filePath, uploadOptions);
   }
 
-  /**
-   * Upload a buffer directly to Cloudinary
-   */
   async uploadBuffer(
     buffer: Buffer,
     options?: {
@@ -129,10 +116,6 @@ export class ObjectStorageService {
     });
   }
 
-  /**
-   * Get video URL from Cloudinary
-   * Supports transformations for adaptive streaming, thumbnails, etc.
-   */
   getVideoUrl(
     publicId: string,
     options?: {
@@ -149,9 +132,6 @@ export class ObjectStorageService {
     });
   }
 
-  /**
-   * Get video thumbnail URL
-   */
   getVideoThumbnail(publicId: string): string {
     return cloudinary.url(publicId, {
       resource_type: 'video',
@@ -163,25 +143,27 @@ export class ObjectStorageService {
     });
   }
 
-  /**
-   * Download object from Cloudinary and stream to response
-   * Note: For public videos, clients should use direct Cloudinary URLs
-   * This is mainly for private/authenticated access
-   */
   async downloadObject(
     publicId: string,
     res: Response,
     cacheTtlSec: number = 3600
   ) {
     try {
-      // Get the video URL
-      const videoUrl = cloudinary.url(publicId, {
-        resource_type: 'video',
-        secure: true,
-      });
+      const folder = this.getCloudinaryFolder();
+      let videoUrl;
+      
+      try {
+        videoUrl = cloudinary.url(folder + '/' + publicId, {
+          resource_type: 'video',
+          secure: true,
+        });
+      } catch (error) {
+        videoUrl = cloudinary.url(publicId, {
+          resource_type: 'video',
+          secure: true,
+        });
+      }
 
-      // For Cloudinary, we can just redirect to the URL
-      // or proxy the content if needed for access control
       res.redirect(videoUrl);
     } catch (error) {
       console.error("Error getting video URL:", error);
@@ -191,32 +173,19 @@ export class ObjectStorageService {
     }
   }
 
-  /**
-   * Delete a video from Cloudinary
-   */
   async deleteVideo(publicId: string): Promise<any> {
     return await cloudinary.uploader.destroy(publicId, {
       resource_type: 'video',
     });
   }
 
-  /**
-   * Get video metadata from Cloudinary
-   */
   async getVideoInfo(publicId: string): Promise<any> {
     return await cloudinary.api.resource(publicId, {
       resource_type: 'video',
     });
   }
 
-  /**
-   * Legacy methods for compatibility with existing code
-   * These are simplified for Cloudinary
-   */
-
   async searchPublicObject(filePath: string): Promise<any | null> {
-    // With Cloudinary, we work with public_ids instead of file paths
-    // This is a compatibility layer
     try {
       const info = await this.getVideoInfo(filePath);
       return info;
@@ -230,24 +199,30 @@ export class ObjectStorageService {
       throw new ObjectNotFoundError();
     }
     const publicId = objectPath.replace("/objects/", "");
+    
+    const folder = this.getCloudinaryFolder();
+    const fullPublicId = folder + '/' + publicId;
 
     try {
-      const info = await this.getVideoInfo(publicId);
+      const info = await this.getVideoInfo(fullPublicId);
       return info;
     } catch (error) {
-      throw new ObjectNotFoundError();
+      try {
+        const info = await this.getVideoInfo(publicId);
+        return info;
+      } catch (fallbackError) {
+        throw new ObjectNotFoundError();
+      }
     }
   }
 
   normalizeObjectEntityPath(rawPath: string): string {
-    // Convert Cloudinary URLs to normalized paths
     if (rawPath.startsWith("https://res.cloudinary.com/")) {
       const url = new URL(rawPath);
       const pathParts = url.pathname.split('/');
-      // Cloudinary URL format: /cloud_name/resource_type/upload/v123456/folder/public_id.ext
       const publicIdWithExt = pathParts.slice(-1)[0];
       const publicId = publicIdWithExt.split('.')[0];
-      return `/objects/${publicId}`;
+      return '/objects/' + publicId;
     }
     return rawPath;
   }
@@ -256,9 +231,6 @@ export class ObjectStorageService {
     rawPath: string,
     aclPolicy: ObjectAclPolicy
   ): Promise<string> {
-    // Cloudinary handles access control differently
-    // Public resources are accessible by default
-    // For private resources, you would use authentication tokens
     const normalizedPath = this.normalizeObjectEntityPath(rawPath);
     return normalizedPath;
   }
@@ -272,18 +244,14 @@ export class ObjectStorageService {
     objectFile: any;
     requestedPermission?: ObjectPermission;
   }): Promise<boolean> {
-    // For now, allow all access
-    // In production, implement proper access control based on your requirements
     return true;
   }
 
   getPublicObjectSearchPaths(): Array<string> {
-    // Not used with Cloudinary, but kept for compatibility
     return [this.getCloudinaryFolder()];
   }
 
   getPrivateObjectDir(): string {
-    // Not used with Cloudinary, but kept for compatibility
     return this.getCloudinaryFolder();
   }
 }
