@@ -116,7 +116,6 @@ function CreatorOverview({ payments }: { payments: CreatorPayment[] }) {
     return totals;
   }, [payments]);
 
-
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
