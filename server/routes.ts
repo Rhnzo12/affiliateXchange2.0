@@ -676,7 +676,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/company/reviews", requireAuth, requireRole('company'), async (req, res) => {
     try {
       const userId = (req.user as any).id;
-      const companyProfile = await storage.getCompanyProfileByUserId(userId);
+      const companyProfile = await storage.getCompanyProfile(userId);
 
       if (!companyProfile) {
         return res.status(404).send("Company profile not found");
@@ -701,7 +701,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).send("Response text is required");
       }
 
-      const companyProfile = await storage.getCompanyProfileByUserId(userId);
+      const companyProfile = await storage.getCompanyProfile(userId);
       if (!companyProfile) {
         return res.status(404).send("Company profile not found");
       }
