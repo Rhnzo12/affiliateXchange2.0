@@ -1023,6 +1023,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.get("/objects/:objectPath(*)", requireAuth, async (req, res) => {
+    console.log("🔍 Requested object path:", req.path);
     const userId = (req.user as any)?.id;
     const objectStorageService = new ObjectStorageService();
     try {
@@ -1034,7 +1035,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!canAccess) {
         return res.sendStatus(401);
       }
-      objectStorageService.downloadObject(objectFile, res);
+      const publicId = req.path.replace("/objects/", "");
+      objectStorageService.downloadObject(publicId, res);
     } catch (error) {
       console.error("Error checking object access:", error);
       if (error instanceof ObjectNotFoundError) {
