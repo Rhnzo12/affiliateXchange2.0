@@ -1345,6 +1345,31 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
+  async getReviewsByCreator(creatorId: string): Promise<Review[]> {
+    try {
+      return await db
+        .select()
+        .from(reviews)
+        .where(eq(reviews.creatorId, creatorId))
+        .orderBy(desc(reviews.createdAt));
+    } catch (error) {
+      if (isLegacyReviewColumnError(error)) {
+        console.warn(
+          "[Storage] reviews column mismatch while fetching creator reviews - attempting legacy fallback.",
+        );
+        const all = await legacyFetchReviews();
+        return all.filter((review) => review.creatorId === creatorId);
+      }
+      if (isMissingRelationError(error, "reviews")) {
+        console.warn(
+          "[Storage] reviews relation missing while fetching creator reviews - returning empty array.",
+        );
+        return [];
+      }
+      throw error;
+    }
+  }
+
   async createReview(review: InsertReview): Promise<Review> {
     try {
       const result = await db
