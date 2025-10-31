@@ -94,9 +94,7 @@ export default function Register() {
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <div className="w-full max-w-md space-y-6">
         <div className="flex items-center justify-center gap-2">
-          <div className="h-10 w-10 rounded-md bg-primary flex items-center justify-center">
-            <Zap className="h-6 w-6 text-primary-foreground" />
-          </div>
+          <img src="/logo.png" alt="AffiliateXchange Logo" className="h-10 w-10 rounded-md object-cover" />
           <span className="text-2xl font-bold">AffiliateXchange</span>
         </div>
 
