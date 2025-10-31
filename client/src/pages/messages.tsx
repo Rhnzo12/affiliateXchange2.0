@@ -316,7 +316,7 @@ useEffect(() => {
     }, 3000);
   }, [selectedConversation]);
 
-  const sendMessage = () => {
+  const sendMessage = async () => {
     if (!selectedConversation || !messageText.trim() || !user?.id) return;
 
     // Clear typing indicator
@@ -330,16 +330,28 @@ useEffect(() => {
       }));
     }
 
+    const messageContent = messageText;
+    setMessageText(""); // Clear input immediately for better UX
+
     // Send via WebSocket if connected
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({
         type: 'chat_message',
         conversationId: selectedConversation,
         senderId: user.id,
-        content: messageText,
+        content: messageContent,
       }));
-      setMessageText("");
+
+      // Immediately refetch messages after sending
+      queryClient.invalidateQueries({
+        queryKey: ["/api/messages", selectedConversation]
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["/api/conversations"]
+      });
     } else {
+      // Restore message if not connected
+      setMessageText(messageContent);
       toast({
         title: "Connection Error",
         description: "Real-time messaging is not connected. Trying to reconnect...",
