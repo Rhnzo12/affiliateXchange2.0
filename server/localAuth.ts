@@ -5,6 +5,7 @@ import session from "express-session";
 import connectPg from "connect-pg-simple";
 import { storage } from "./storage";
 import bcrypt from "bcrypt";
+import { setupGoogleAuth } from "./googleAuth";
 
 // Middleware to check if user is authenticated
 export function isAuthenticated(req: Request, res: any, next: any) {
@@ -92,6 +93,9 @@ export async function setupAuth(app: Express) {
   // Initialize passport
   app.use(passport.initialize());
   app.use(passport.session());
+
+  // Setup Google OAuth
+  await setupGoogleAuth(app);
 
   // Authentication routes
   app.post("/api/auth/register", async (req, res) => {

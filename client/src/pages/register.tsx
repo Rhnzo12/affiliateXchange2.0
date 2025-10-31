@@ -8,7 +8,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Input } from "@/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useToast } from "@/hooks/use-toast";
-import { Zap } from "lucide-react";
+import { Zap, Mail } from "lucide-react";
 import { Link } from "wouter";
 
 const registerSchema = z.object({
@@ -83,6 +83,11 @@ export default function Register() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleGoogleSignup = () => {
+    // Redirect to Google OAuth endpoint
+    window.location.href = "/api/auth/google";
   };
 
   return (
@@ -236,9 +241,9 @@ export default function Register() {
                   )}
                 />
 
-                <Button 
-                  type="submit" 
-                  className="w-full" 
+                <Button
+                  type="submit"
+                  className="w-full"
                   disabled={isLoading}
                   data-testid="button-register"
                 >
@@ -246,6 +251,27 @@ export default function Register() {
                 </Button>
               </form>
             </Form>
+
+            <div className="relative my-4">
+              <div className="absolute inset-0 flex items-center">
+                <span className="w-full border-t" />
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-card px-2 text-muted-foreground">Or continue with</span>
+              </div>
+            </div>
+
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full"
+              onClick={handleGoogleSignup}
+              disabled={isLoading}
+              data-testid="button-google-signup"
+            >
+              <Mail className="mr-2 h-4 w-4" />
+              Continue with Google
+            </Button>
 
             <div className="mt-4 text-center text-sm">
               Already have an account?{" "}
