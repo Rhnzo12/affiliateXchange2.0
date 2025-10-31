@@ -8,13 +8,23 @@ import type { User } from "../shared/schema";
 export async function setupGoogleAuth(app: Express) {
   const googleClientId = process.env.GOOGLE_CLIENT_ID;
   const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET;
-  const callbackURL = process.env.GOOGLE_CALLBACK_URL || "/api/auth/google/callback";
+
+  // Build absolute callback URL
+  const port = process.env.PORT || 3000;
+  const baseURL = process.env.BASE_URL || `http://localhost:${port}`;
+  const callbackURL = process.env.GOOGLE_CALLBACK_URL
+    ? (process.env.GOOGLE_CALLBACK_URL.startsWith('http')
+        ? process.env.GOOGLE_CALLBACK_URL
+        : `${baseURL}${process.env.GOOGLE_CALLBACK_URL}`)
+    : `${baseURL}/api/auth/google/callback`;
 
   // Only setup Google auth if credentials are provided
   if (!googleClientId || !googleClientSecret) {
     console.log("[Google Auth] Google OAuth credentials not configured. Skipping Google authentication setup.");
     return;
   }
+
+  console.log("[Google Auth] Callback URL:", callbackURL);
 
   // Configure Google OAuth Strategy
   passport.use(

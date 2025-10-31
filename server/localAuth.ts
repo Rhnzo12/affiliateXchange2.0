@@ -71,13 +71,24 @@ export async function setupAuth(app: Express) {
 
   // Serialize user to session
   passport.serializeUser((user: any, done) => {
-    done(null, user.id);
+    // Handle pending Google users (they don't have an id yet)
+    if (user.isNewGoogleUser) {
+      done(null, { isNewGoogleUser: true, data: user });
+    } else {
+      done(null, { isNewGoogleUser: false, id: user.id });
+    }
   });
 
   // Deserialize user from session
-  passport.deserializeUser(async (id: string, done) => {
+  passport.deserializeUser(async (data: any, done) => {
     try {
-      const user = await storage.getUser(id);
+      // Handle pending Google users
+      if (data.isNewGoogleUser) {
+        return done(null, data.data);
+      }
+
+      // Handle regular users
+      const user = await storage.getUser(data.id);
       if (!user) {
         // User not found - clear the session
         return done(null, false);
