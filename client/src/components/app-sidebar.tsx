@@ -190,7 +190,7 @@ export function AppSidebar() {
               <div className="h-8 w-8 rounded-md bg-primary flex items-center justify-center">
                 <Zap className="h-5 w-5 text-primary-foreground" />
               </div>
-              <span className="font-bold text-lg">CreatorLink</span>
+              <span className="font-bold text-lg">AffiliateXchange</span>
             </div>
           </Link>
           <NotificationCenter />

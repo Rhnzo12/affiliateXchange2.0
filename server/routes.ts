@@ -310,7 +310,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Generate tracking link and code
       const trackingCode = `CR-${application.creatorId.substring(0, 8)}-${application.offerId.substring(0, 8)}`;
-      const trackingLink = `https://example.com/go/${trackingCode}`;
+      const port = process.env.PORT || 3000;
+      const baseURL = process.env.BASE_URL || `http://localhost:${port}`;
+      const trackingLink = `${baseURL}/go/${trackingCode}`;
 
       const approved = await storage.approveApplication(
         application.id,
@@ -1809,7 +1811,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (now >= scheduledTime) {
             try {
               const trackingCode = `CR-${application.creatorId.substring(0, 8)}-${application.offerId.substring(0, 8)}-${Date.now()}`;
-              const trackingLink = `https://${process.env.REPLIT_DEV_DOMAIN || 'localhost:5000'}/go/${trackingCode}`;
+              const port = process.env.PORT || 3000;
+              const baseURL = process.env.BASE_URL || `http://localhost:${port}`;
+              const trackingLink = `${baseURL}/go/${trackingCode}`;
               
               await storage.approveApplication(
                 application.id,

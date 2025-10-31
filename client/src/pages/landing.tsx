@@ -23,7 +23,7 @@ export default function Landing() {
             <div className="h-8 w-8 rounded-md bg-primary flex items-center justify-center">
               <Zap className="h-5 w-5 text-primary-foreground" />
             </div>
-            <span className="text-xl font-bold">CreatorLink</span>
+            <span className="text-xl font-bold">AffiliateXchange</span>
           </div>
           <Button onClick={handleLogin} data-testid="button-login">
             Sign In
@@ -87,7 +87,7 @@ export default function Landing() {
       <section className="py-20 bg-card/50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center space-y-4 mb-16">
-            <h2 className="text-3xl sm:text-4xl font-bold">Why Choose CreatorLink?</h2>
+            <h2 className="text-3xl sm:text-4xl font-bold">Why Choose AffiliateXchange?</h2>
             <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
               Everything you need to monetize your audience and grow your income
             </p>
@@ -229,7 +229,7 @@ export default function Landing() {
                     ))}
                   </div>
                   <p className="text-muted-foreground">
-                    "CreatorLink has completely transformed how I monetize my content. The approval process is instant and the commissions are fantastic!"
+                    "AffiliateXchange has completely transformed how I monetize my content. The approval process is instant and the commissions are fantastic!"
                   </p>
                   <div className="flex items-center gap-3 pt-4 border-t">
                     <div className="h-10 w-10 rounded-full bg-primary/10" />
@@ -250,7 +250,7 @@ export default function Landing() {
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center space-y-8">
           <h2 className="text-3xl sm:text-4xl font-bold">Ready to Start Earning?</h2>
           <p className="text-xl text-muted-foreground">
-            Join thousands of creators already making money with CreatorLink
+            Join thousands of creators already making money with AffiliateXchange
           </p>
           <div className="flex flex-wrap justify-center gap-4">
             <Button size="lg" onClick={handleLogin} data-testid="button-join-now" className="text-base">
@@ -283,10 +283,10 @@ export default function Landing() {
               <div className="h-8 w-8 rounded-md bg-primary flex items-center justify-center">
                 <Zap className="h-5 w-5 text-primary-foreground" />
               </div>
-              <span className="font-bold">CreatorLink</span>
+              <span className="font-bold">AffiliateXchange</span>
             </div>
             <p className="text-sm text-muted-foreground">
-              © 2025 CreatorLink. All rights reserved.
+              © 2025 AffiliateXchange. All rights reserved.
             </p>
           </div>
         </div>
