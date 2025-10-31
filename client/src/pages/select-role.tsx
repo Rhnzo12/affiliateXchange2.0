@@ -60,14 +60,14 @@ export default function SelectRole() {
           <div className="h-10 w-10 rounded-md bg-primary flex items-center justify-center">
             <Zap className="h-6 w-6 text-primary-foreground" />
           </div>
-          <span className="text-2xl font-bold">CreatorLink</span>
+          <span className="text-2xl font-bold">AffiliateXchange</span>
         </div>
 
         <Card>
           <CardHeader className="text-center">
             <CardTitle>Choose Your Account Type</CardTitle>
             <CardDescription>
-              Select how you'll be using CreatorLink
+              Select how you'll be using AffiliateXchange
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">

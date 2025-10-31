@@ -51,7 +51,7 @@ export default function Onboarding() {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted p-4">
       <div className="w-full max-w-4xl">
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold mb-2">Welcome to CreatorLink</h1>
+          <h1 className="text-4xl font-bold mb-2">Welcome to AffiliateXchange</h1>
           <p className="text-muted-foreground">Choose how you'd like to use the platform</p>
         </div>
 
