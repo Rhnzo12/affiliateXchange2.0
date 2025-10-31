@@ -278,9 +278,7 @@ export default function Landing() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
             <div className="flex items-center gap-2">
-              <div className="h-8 w-8 rounded-md bg-primary flex items-center justify-center">
-                <Zap className="h-5 w-5 text-primary-foreground" />
-              </div>
+              <img src="/logo.png" alt="AffiliateXchange Logo" className="h-8 w-8 rounded-md object-cover" />
               <span className="font-bold">AffiliateXchange</span>
             </div>
             <p className="text-sm text-muted-foreground">
