@@ -6,13 +6,61 @@ import { useRoute, Link } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, DollarSign, Users, Eye, Calendar, Upload, Trash2, Video, AlertCircle } from "lucide-react";
+import { ArrowLeft, DollarSign, Users, Eye, Calendar, Upload, Trash2, Video, AlertCircle, Play } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+
+// Helper function to generate thumbnail from video
+const generateThumbnail = async (videoUrl: string): Promise<Blob> => {
+  return new Promise((resolve, reject) => {
+    const video = document.createElement('video');
+    video.crossOrigin = 'anonymous';
+    video.src = videoUrl;
+    video.muted = true;
+    
+    video.addEventListener('loadeddata', () => {
+      // Seek to 1 second or 10% of video duration, whichever is less
+      const seekTime = Math.min(1, video.duration * 0.1);
+      video.currentTime = seekTime;
+    });
+
+    video.addEventListener('seeked', () => {
+      // Create canvas and draw video frame
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        reject(new Error('Could not get canvas context'));
+        return;
+      }
+      
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      
+      // Convert canvas to blob
+      canvas.toBlob(
+        (blob) => {
+          if (blob) {
+            resolve(blob);
+          } else {
+            reject(new Error('Failed to create thumbnail blob'));
+          }
+        },
+        'image/jpeg',
+        0.8
+      );
+    });
+
+    video.addEventListener('error', () => {
+      reject(new Error('Failed to load video'));
+    });
+  });
+};
 
 export default function CompanyOfferDetail() {
   const { toast } = useToast();
@@ -54,6 +102,7 @@ export default function CompanyOfferDetail() {
   // Video upload state
   const [showVideoDialog, setShowVideoDialog] = useState(false);
   const [videoUrl, setVideoUrl] = useState("");
+  const [thumbnailUrl, setThumbnailUrl] = useState("");
   const [videoTitle, setVideoTitle] = useState("");
   const [videoDescription, setVideoDescription] = useState("");
   const [creatorCredit, setCreatorCredit] = useState("");
@@ -66,6 +115,7 @@ export default function CompanyOfferDetail() {
     if (!open) {
       // Reset form when dialog closes
       setVideoUrl("");
+      setThumbnailUrl("");
       setVideoTitle("");
       setVideoDescription("");
       setCreatorCredit("");
@@ -115,7 +165,7 @@ export default function CompanyOfferDetail() {
     },
   });
 
-  // Handle file selection and automatic upload
+  // Handle file selection and automatic upload with thumbnail generation
   const handleFileSelect = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -171,7 +221,7 @@ export default function CompanyOfferDetail() {
         formData.append('folder', uploadData.folder);
       }
 
-      // Upload to Cloudinary
+      // Upload video to Cloudinary
       const uploadResult = await fetch(uploadData.uploadUrl, {
         method: "POST",
         body: formData,
@@ -179,13 +229,76 @@ export default function CompanyOfferDetail() {
 
       if (uploadResult.ok) {
         const cloudinaryResponse = await uploadResult.json();
-        const uploadedUrl = cloudinaryResponse.secure_url;
-        setVideoUrl(uploadedUrl);
-        setIsUploading(false);
+        const uploadedVideoUrl = cloudinaryResponse.secure_url;
+        
         toast({
           title: "Video Uploaded",
-          description: "Video uploaded successfully to Cloudinary. Please fill in the details below.",
+          description: "Generating thumbnail...",
         });
+
+        // Generate thumbnail from the uploaded video
+        try {
+          const thumbnailBlob = await generateThumbnail(uploadedVideoUrl);
+          
+          // Get fresh upload parameters for thumbnail
+          const thumbUploadResponse = await fetch("/api/objects/upload", {
+            method: "POST",
+            credentials: "include",
+          });
+          const thumbUploadData = await thumbUploadResponse.json();
+
+          // Upload thumbnail to Cloudinary
+          const thumbnailFormData = new FormData();
+          thumbnailFormData.append('file', thumbnailBlob, 'thumbnail.jpg');
+          
+          if (thumbUploadData.uploadPreset) {
+            thumbnailFormData.append('upload_preset', thumbUploadData.uploadPreset);
+          } else if (thumbUploadData.signature) {
+            thumbnailFormData.append('signature', thumbUploadData.signature);
+            thumbnailFormData.append('timestamp', thumbUploadData.timestamp.toString());
+            thumbnailFormData.append('api_key', thumbUploadData.apiKey);
+          }
+
+          if (thumbUploadData.folder) {
+            thumbnailFormData.append('folder', thumbUploadData.folder + '/thumbnails');
+          }
+
+          const thumbnailUploadResult = await fetch(thumbUploadData.uploadUrl, {
+            method: "POST",
+            body: thumbnailFormData,
+          });
+
+          if (thumbnailUploadResult.ok) {
+            const thumbnailResponse = await thumbnailUploadResult.json();
+            const uploadedThumbnailUrl = thumbnailResponse.secure_url;
+            
+            setVideoUrl(uploadedVideoUrl);
+            setThumbnailUrl(uploadedThumbnailUrl);
+            setIsUploading(false);
+            
+            toast({
+              title: "Success!",
+              description: "Video and thumbnail uploaded successfully. Fill in the details below.",
+            });
+          } else {
+            // Thumbnail upload failed, but video is uploaded
+            setVideoUrl(uploadedVideoUrl);
+            setIsUploading(false);
+            toast({
+              title: "Video Uploaded",
+              description: "Video uploaded but thumbnail generation failed. You can still proceed.",
+            });
+          }
+        } catch (thumbnailError) {
+          // Thumbnail generation failed, but video is uploaded
+          console.error('Thumbnail generation error:', thumbnailError);
+          setVideoUrl(uploadedVideoUrl);
+          setIsUploading(false);
+          toast({
+            title: "Video Uploaded",
+            description: "Video uploaded but thumbnail generation failed. You can still proceed.",
+          });
+        }
       } else {
         throw new Error("Upload failed");
       }
@@ -239,12 +352,13 @@ export default function CompanyOfferDetail() {
 
     createVideoMutation.mutate({
       videoUrl,
+      thumbnailUrl: thumbnailUrl || null,
       title: videoTitle.trim(),
       description: videoDescription.trim(),
       creatorCredit: creatorCredit.trim(),
       originalPlatform: originalPlatform.trim(),
     });
-  }, [videoUrl, videoTitle, videoDescription, creatorCredit, originalPlatform, createVideoMutation, toast]);
+  }, [videoUrl, thumbnailUrl, videoTitle, videoDescription, creatorCredit, originalPlatform, createVideoMutation, toast]);
 
   const videoCount = videos.length;
   const canAddMoreVideos = videoCount < 12;
@@ -288,6 +402,11 @@ export default function CompanyOfferDetail() {
               <div className="text-sm font-medium text-green-600 dark:text-green-400">
                 Video Ready ✓
               </div>
+              {thumbnailUrl && (
+                <div className="text-xs text-green-600 dark:text-green-400">
+                  Thumbnail generated ✓
+                </div>
+              )}
               <div className="text-xs text-muted-foreground">
                 Click to select a different video
               </div>
@@ -311,7 +430,7 @@ export default function CompanyOfferDetail() {
         </div>
       </label>
     </div>
-  ), [videoUrl, isUploading, handleFileSelect]);
+  ), [videoUrl, thumbnailUrl, isUploading, handleFileSelect]);
 
   if (isLoading || offerLoading) {
     return (
@@ -485,8 +604,23 @@ export default function CompanyOfferDetail() {
               {videos.map((video: any) => (
                 <Card key={video.id} className="overflow-hidden">
                   <CardContent className="p-4 space-y-2">
-                    <div className="aspect-video bg-muted rounded-md flex items-center justify-center">
-                      <Video className="h-8 w-8 text-muted-foreground" />
+                    <div className="aspect-video bg-muted rounded-md relative overflow-hidden">
+                      {video.thumbnailUrl ? (
+                        <>
+                          <img 
+                            src={video.thumbnailUrl} 
+                            alt={video.title}
+                            className="w-full h-full object-cover"
+                          />
+                          <div className="absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
+                            <Play className="h-8 w-8 text-white" />
+                          </div>
+                        </>
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <Video className="h-8 w-8 text-muted-foreground" />
+                        </div>
+                      )}
                     </div>
                     <div>
                       <h4 className="font-semibold text-sm line-clamp-1" data-testid={`text-video-title-${video.id}`}>
@@ -543,7 +677,7 @@ export default function CompanyOfferDetail() {
               )}
               {videoUrl && (
                 <p className="text-xs text-green-600 dark:text-green-400">
-                  ✓ Video uploaded successfully. Now fill in the details and click "Add Video"
+                  ✓ Video uploaded successfully. {thumbnailUrl && 'Thumbnail generated automatically.'} Now fill in the details and click "Add Video"
                 </p>
               )}
             </div>

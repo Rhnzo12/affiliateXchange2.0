@@ -80,7 +80,9 @@ export default function Browse() {
       const url = `/api/offers${params.toString() ? '?' + params.toString() : ''}`;
       const res = await fetch(url, { credentials: 'include' });
       if (!res.ok) throw new Error('Failed to fetch offers');
-      return res.json();
+      const data = await res.json();
+      
+      return data;
     },
     enabled: isAuthenticated,
   });
@@ -282,28 +284,61 @@ export default function Browse() {
         <div className="grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {offers.map((offer) => {
             const isFavorite = favorites.some(f => f.offerId === offer.id);
+            
             return (
               <Link key={offer.id} href={`/offers/${offer.id}`}>
                 <Card className="hover-elevate cursor-pointer border-card-border h-full" data-testid={`card-offer-${offer.id}`}>
+                  {/* Thumbnail */}
                   <div className="aspect-video relative bg-muted rounded-t-lg overflow-hidden">
                     {offer.featuredImageUrl ? (
-                      <img src={offer.featuredImageUrl} alt={offer.title} className="w-full h-full object-cover" />
+                      <>
+                        <img 
+                          src={offer.featuredImageUrl} 
+                          alt={offer.title} 
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            console.error(`Image failed to load: ${offer.title}`, offer.featuredImageUrl);
+                            (e.target as HTMLImageElement).style.display = 'none';
+                            const fallback = (e.target as HTMLImageElement).nextElementSibling;
+                            if (fallback) fallback.classList.remove('hidden');
+                          }}
+                        />
+                        {/* Fallback if image fails */}
+                        <div className="hidden absolute inset-0 flex items-center justify-center bg-muted">
+                          <Play className="h-12 w-12 text-muted-foreground/50" />
+                        </div>
+                      </>
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center">
+                      <div className="absolute inset-0 flex items-center justify-center">
                         <Play className="h-12 w-12 text-muted-foreground/50" />
                       </div>
                     )}
+
                     {offer.isPriority && (
                       <Badge className="absolute top-2 right-2 bg-primary">
                         Featured
                       </Badge>
                     )}
+                    
+                    {/* Favorite button - shows on all offers */}
                     <button
-                      className="absolute top-2 left-2 h-8 w-8 rounded-full bg-background/80 backdrop-blur flex items-center justify-center hover-elevate"
+                      className="rounded-full flex items-center justify-center transition-all hover:scale-110 shadow-lg"
+                      style={{ 
+                        position: 'absolute',
+                        top: '8px',
+                        left: '8px',
+                        width: '32px',
+                        height: '32px',
+                        backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                        backdropFilter: 'blur(8px)',
+                        zIndex: 9999,
+                        border: 'none',
+                        cursor: 'pointer'
+                      }}
                       onClick={(e) => handleFavoriteToggle(e, offer.id)}
                       data-testid={`button-favorite-${offer.id}`}
                     >
-                      <Heart className={`h-4 w-4 ${isFavorite ? 'fill-primary text-primary' : ''}`} />
+                      <Heart className={`h-4 w-4 ${isFavorite ? 'fill-primary text-primary' : 'text-gray-600'}`} />
                     </button>
                   </div>
 

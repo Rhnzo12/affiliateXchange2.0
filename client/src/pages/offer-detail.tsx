@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation } from "@tanstack/react-query";
@@ -8,7 +8,6 @@ import { isUnauthorizedError } from "@/lib/authUtils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -56,6 +55,14 @@ export default function OfferDetail() {
   const [preferredCommission, setPreferredCommission] = useState("");
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [selectedVideo, setSelectedVideo] = useState<any>(null);
+  const [activeSection, setActiveSection] = useState("overview");
+  const [isScrolling, setIsScrolling] = useState(false);
+
+  // Refs for sections
+  const overviewRef = useRef<HTMLDivElement>(null);
+  const videosRef = useRef<HTMLDivElement>(null);
+  const requirementsRef = useRef<HTMLDivElement>(null);
+  const reviewsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -69,6 +76,89 @@ export default function OfferDetail() {
       }, 500);
     }
   }, [isAuthenticated, isLoading, toast]);
+
+  // Scroll spy effect using Intersection Observer
+  useEffect(() => {
+    const observerOptions = {
+      root: null,
+      rootMargin: "-80px 0px -60% 0px", // Account for sticky header and better triggering
+      threshold: 0.1, // Simplified threshold
+    };
+
+    const observerCallback = (entries: IntersectionObserverEntry[]) => {
+      // Don't update active section when user is clicking tabs
+      if (isScrolling) return;
+
+      // Find the entry with the highest intersection ratio
+      let maxEntry = entries[0];
+      
+      entries.forEach((entry) => {
+        if (entry.isIntersecting && entry.intersectionRatio > (maxEntry?.intersectionRatio || 0)) {
+          maxEntry = entry;
+        }
+      });
+
+      if (maxEntry?.isIntersecting) {
+        const sectionId = maxEntry.target.getAttribute("data-section");
+        if (sectionId) {
+          setActiveSection(sectionId);
+        }
+      }
+    };
+
+    const observer = new IntersectionObserver(observerCallback, observerOptions);
+
+    // Observe all sections
+    const sections = [overviewRef, videosRef, requirementsRef, reviewsRef];
+    sections.forEach((ref) => {
+      if (ref.current) {
+        observer.observe(ref.current);
+      }
+    });
+
+    return () => {
+      sections.forEach((ref) => {
+        if (ref.current) {
+          observer.unobserve(ref.current);
+        }
+      });
+    };
+  }, [isScrolling]);
+
+  // Smooth scroll to section
+  const scrollToSection = (sectionId: string) => {
+    // Immediately update active tab
+    setActiveSection(sectionId);
+    setIsScrolling(true);
+
+    const refs: Record<string, React.RefObject<HTMLDivElement>> = {
+      overview: overviewRef,
+      videos: videosRef,
+      requirements: requirementsRef,
+      reviews: reviewsRef,
+    };
+
+    const ref = refs[sectionId];
+    if (ref.current) {
+      // Calculate the position of the sticky nav
+      const stickyNavElement = document.querySelector('[class*="sticky"]');
+      const navHeight = stickyNavElement ? stickyNavElement.getBoundingClientRect().height : 80;
+      
+      // Get the position of the section and scroll to it
+      const elementPosition = ref.current.getBoundingClientRect().top;
+      const offsetPosition = elementPosition + window.pageYOffset - navHeight - 10; // Extra 10px padding
+      
+      window.scrollTo({
+        top: offsetPosition,
+        behavior: "smooth",
+      });
+
+      // Reset scrolling flag after animation completes
+      setTimeout(() => {
+        setIsScrolling(false);
+      }, 1000);
+    }
+  };
 
   const { data: offer, isLoading: offerLoading } = useQuery<any>({
     queryKey: ["/api/offers", offerId],
@@ -230,9 +320,9 @@ export default function OfferDetail() {
   }
 
   return (
-    <div className="space-y-6 pb-20">
+    <div className="pb-20">
       {/* Hero Image */}
-      <div className="aspect-[21/9] relative bg-muted rounded-lg overflow-hidden">
+      <div className="aspect-[21/9] relative bg-muted rounded-lg overflow-hidden mb-6">
         {offer.featuredImageUrl ? (
           <img src={offer.featuredImageUrl} alt={offer.title} className="w-full h-full object-cover" />
         ) : (
@@ -248,7 +338,7 @@ export default function OfferDetail() {
       </div>
 
       {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between gap-4">
+      <div className="flex flex-col sm:flex-row justify-between gap-4 mb-6">
         <div className="space-y-2">
           <div className="flex items-center gap-3">
             {offer.company?.logoUrl && (
@@ -277,299 +367,340 @@ export default function OfferDetail() {
         </div>
       </div>
 
-      {/* Tabs */}
-      <Tabs defaultValue="overview" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="overview" data-testid="tab-overview">Overview</TabsTrigger>
-          <TabsTrigger value="videos" data-testid="tab-videos">Videos ({offer.videos?.length || 0})</TabsTrigger>
-          <TabsTrigger value="requirements" data-testid="tab-requirements">Requirements</TabsTrigger>
-          <TabsTrigger value="reviews" data-testid="tab-reviews">Reviews</TabsTrigger>
-        </TabsList>
+      {/* Sticky Navigation */}
+      <div className="sticky top-0 z-30 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b mb-6">
+        <div className="flex">
+          <button
+            onClick={() => scrollToSection("overview")}
+            className={`flex-1 px-6 py-3 font-medium text-sm transition-colors border-b-2 ${
+              activeSection === "overview"
+                ? "border-primary text-primary"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            }`}
+            data-testid="tab-overview"
+          >
+            Overview
+          </button>
+          <button
+            onClick={() => scrollToSection("videos")}
+            className={`flex-1 px-6 py-3 font-medium text-sm transition-colors border-b-2 ${
+              activeSection === "videos"
+                ? "border-primary text-primary"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            }`}
+            data-testid="tab-videos"
+          >
+            Videos ({offer.videos?.length || 0})
+          </button>
+          <button
+            onClick={() => scrollToSection("requirements")}
+            className={`flex-1 px-6 py-3 font-medium text-sm transition-colors border-b-2 ${
+              activeSection === "requirements"
+                ? "border-primary text-primary"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            }`}
+            data-testid="tab-requirements"
+          >
+            Requirements
+          </button>
+          <button
+            onClick={() => scrollToSection("reviews")}
+            className={`flex-1 px-6 py-3 font-medium text-sm transition-colors border-b-2 ${
+              activeSection === "reviews"
+                ? "border-primary text-primary"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            }`}
+            data-testid="tab-reviews"
+          >
+            Reviews
+          </button>
+        </div>
+      </div>
 
-        <TabsContent value="overview" className="space-y-6">
-          <Card className="border-card-border">
-            <CardHeader>
-              <CardTitle>About This Offer</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <p className="text-muted-foreground whitespace-pre-wrap">
-                {offer.fullDescription || offer.description || offer.shortDescription || "No description available"}
-              </p>
-              
-              <div className="grid sm:grid-cols-2 gap-4 pt-4 border-t">
-                <div className="space-y-1">
-                  <div className="text-sm text-muted-foreground">Commission</div>
-                  <div className="text-2xl font-bold font-mono text-primary">
-                    {formatCommission(offer)}
-                  </div>
+      {/* Overview Section */}
+      <div ref={overviewRef} data-section="overview" className="space-y-6 mb-12">
+        <Card className="border-card-border">
+          <CardHeader>
+            <CardTitle>About This Offer</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-muted-foreground whitespace-pre-wrap">
+              {offer.fullDescription || offer.description || offer.shortDescription || "No description available"}
+            </p>
+            
+            <div className="grid sm:grid-cols-2 gap-4 pt-4 border-t">
+              <div className="space-y-1">
+                <div className="text-sm text-muted-foreground">Commission</div>
+                <div className="text-2xl font-bold font-mono text-primary">
+                  {formatCommission(offer)}
                 </div>
-                <div className="space-y-1">
-                  <div className="text-sm text-muted-foreground">Commission Type</div>
-                  <Badge>{offer.commissionType?.replace(/_/g, ' ') || 'Standard'}</Badge>
-                </div>
-                {offer.paymentSchedule && (
-                  <div className="space-y-1">
-                    <div className="text-sm text-muted-foreground">Payment Schedule</div>
-                    <div className="font-semibold">{offer.paymentSchedule}</div>
-                  </div>
-                )}
-                {offer.minimumPayout && (
-                  <div className="space-y-1">
-                    <div className="text-sm text-muted-foreground">Minimum Payout</div>
-                    <div className="font-semibold font-mono">${offer.minimumPayout}</div>
-                  </div>
-                )}
               </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="videos" className="space-y-6">
-          {!offer.videos || offer.videos.length === 0 ? (
-            <Card className="border-card-border">
-              <CardContent className="p-12 text-center">
-                <Play className="h-12 w-12 text-muted-foreground/50 mx-auto mb-4" />
-                <p className="text-muted-foreground">No example videos available</p>
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-              {offer.videos.map((video: any) => (
-                <Card
-                  key={video.id}
-                  className="hover-elevate cursor-pointer border-card-border"
-                  onClick={() => setSelectedVideo(video)}
-                  data-testid={`video-${video.id}`}
-                >
-                  <div className="aspect-video relative bg-muted rounded-t-lg overflow-hidden">
-                    {video.thumbnailUrl ? (
-                      <img src={video.thumbnailUrl} alt={video.title} className="w-full h-full object-cover" />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center">
-                        <Play className="h-8 w-8 text-muted-foreground/50" />
-                      </div>
-                    )}
-                    <div className="absolute inset-0 bg-black/20 flex items-center justify-center">
-                      <Play className="h-12 w-12 text-white" />
-                    </div>
-                  </div>
-                  <CardContent className="p-3">
-                    <h4 className="font-semibold text-sm line-clamp-1">{video.title}</h4>
-                    {video.creatorCredit && (
-                      <p className="text-xs text-muted-foreground mt-1">by {video.creatorCredit}</p>
-                    )}
-                  </CardContent>
-                </Card>
-              ))}
+              <div className="space-y-1">
+                <div className="text-sm text-muted-foreground">Commission Type</div>
+                <Badge>{offer.commissionType?.replace(/_/g, ' ') || 'Standard'}</Badge>
+              </div>
+              {offer.paymentSchedule && (
+                <div className="space-y-1">
+                  <div className="text-sm text-muted-foreground">Payment Schedule</div>
+                  <div className="font-semibold">{offer.paymentSchedule}</div>
+                </div>
+              )}
+              {offer.minimumPayout && (
+                <div className="space-y-1">
+                  <div className="text-sm text-muted-foreground">Minimum Payout</div>
+                  <div className="font-semibold font-mono">${offer.minimumPayout}</div>
+                </div>
+              )}
             </div>
-          )}
-        </TabsContent>
+          </CardContent>
+        </Card>
+      </div>
 
-        <TabsContent value="requirements" className="space-y-6">
+      {/* Videos Section */}
+      <div ref={videosRef} data-section="videos" className="space-y-6 mb-12">
+        <h2 className="text-2xl font-bold">Example Videos</h2>
+        {!offer.videos || offer.videos.length === 0 ? (
           <Card className="border-card-border">
-            <CardHeader>
-              <CardTitle>Creator Requirements</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {offer.minimumFollowers && (
-                <div className="flex items-start gap-3">
-                  <Users className="h-5 w-5 text-muted-foreground mt-0.5" />
-                  <div>
-                    <div className="font-semibold">Minimum Followers</div>
-                    <div className="text-muted-foreground">{offer.minimumFollowers.toLocaleString()}</div>
-                  </div>
-                </div>
-              )}
-              {offer.allowedPlatforms && offer.allowedPlatforms.length > 0 && (
-                <div className="flex items-start gap-3">
-                  <CheckCircle2 className="h-5 w-5 text-muted-foreground mt-0.5" />
-                  <div>
-                    <div className="font-semibold">Allowed Platforms</div>
-                    <div className="flex gap-2 mt-1 flex-wrap">
-                      {offer.allowedPlatforms.map((platform: string) => (
-                        <Badge key={platform} variant="secondary">{platform}</Badge>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
-              {offer.geographicRestrictions && offer.geographicRestrictions.length > 0 && (
-                <div className="flex items-start gap-3">
-                  <MapPin className="h-5 w-5 text-muted-foreground mt-0.5" />
-                  <div>
-                    <div className="font-semibold">Geographic Restrictions</div>
-                    <div className="text-muted-foreground">{offer.geographicRestrictions.join(', ')}</div>
-                  </div>
-                </div>
-              )}
-              {offer.contentStyleRequirements && (
-                <div className="pt-4 border-t">
-                  <div className="font-semibold mb-2">Content Style Requirements</div>
-                  <p className="text-muted-foreground whitespace-pre-wrap">{offer.contentStyleRequirements}</p>
-                </div>
-              )}
-              {offer.brandSafetyRequirements && (
-                <div className="pt-4 border-t">
-                  <div className="font-semibold mb-2">Brand Safety Requirements</div>
-                  <p className="text-muted-foreground whitespace-pre-wrap">{offer.brandSafetyRequirements}</p>
-                </div>
-              )}
-              {!offer.minimumFollowers && 
-               !offer.allowedPlatforms?.length && 
-               !offer.geographicRestrictions?.length && 
-               !offer.contentStyleRequirements && 
-               !offer.brandSafetyRequirements && (
-                <p className="text-center py-8 text-muted-foreground">
-                  No specific requirements listed
-                </p>
-              )}
+            <CardContent className="p-12 text-center">
+              <Play className="h-12 w-12 text-muted-foreground/50 mx-auto mb-4" />
+              <p className="text-muted-foreground">No example videos available</p>
             </CardContent>
           </Card>
-        </TabsContent>
+        ) : (
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            {offer.videos.map((video: any) => (
+              <Card
+                key={video.id}
+                className="hover-elevate cursor-pointer border-card-border"
+                onClick={() => setSelectedVideo(video)}
+                data-testid={`video-${video.id}`}
+              >
+                <div className="aspect-video relative bg-muted rounded-t-lg overflow-hidden">
+                  {video.thumbnailUrl ? (
+                    <img src={video.thumbnailUrl} alt={video.title} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <Play className="h-8 w-8 text-muted-foreground/50" />
+                    </div>
+                  )}
+                  <div className="absolute inset-0 bg-black/20 flex items-center justify-center">
+                    <Play className="h-12 w-12 text-white" />
+                  </div>
+                </div>
+                <CardContent className="p-3">
+                  <h4 className="font-semibold text-sm line-clamp-1">{video.title}</h4>
+                  {video.creatorCredit && (
+                    <p className="text-xs text-muted-foreground mt-1">by {video.creatorCredit}</p>
+                  )}
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+      </div>
 
-        <TabsContent value="reviews" className="space-y-6">
-          <Card className="border-card-border">
-            <CardHeader>
-              <CardTitle>Creator Reviews</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {reviewsLoading ? (
-                <div className="text-center py-12">
-                  <p className="text-muted-foreground">Loading reviews...</p>
+      {/* Requirements Section */}
+      <div ref={requirementsRef} data-section="requirements" className="space-y-6 mb-12">
+        <h2 className="text-2xl font-bold">Creator Requirements</h2>
+        <Card className="border-card-border">
+          <CardContent className="space-y-4 pt-6">
+            {offer.minimumFollowers && (
+              <div className="flex items-start gap-3">
+                <Users className="h-5 w-5 text-muted-foreground mt-0.5" />
+                <div>
+                  <div className="font-semibold">Minimum Followers</div>
+                  <div className="text-muted-foreground">{offer.minimumFollowers.toLocaleString()}</div>
                 </div>
-              ) : !reviews || reviews.length === 0 ? (
-                <div className="text-center py-12">
-                  <Star className="h-12 w-12 text-muted-foreground/50 mx-auto mb-4" />
-                  <p className="text-muted-foreground">No reviews yet</p>
-                  <p className="text-sm text-muted-foreground mt-1">Be the first to work with this offer and leave a review</p>
+              </div>
+            )}
+            {offer.allowedPlatforms && offer.allowedPlatforms.length > 0 && (
+              <div className="flex items-start gap-3">
+                <CheckCircle2 className="h-5 w-5 text-muted-foreground mt-0.5" />
+                <div>
+                  <div className="font-semibold">Allowed Platforms</div>
+                  <div className="flex gap-2 mt-1 flex-wrap">
+                    {offer.allowedPlatforms.map((platform: string) => (
+                      <Badge key={platform} variant="secondary">{platform}</Badge>
+                    ))}
+                  </div>
                 </div>
-              ) : (
-                <div className="space-y-6">
-                  {reviews.map((review: any) => (
-                    <div key={review.id} className="border-b pb-6 last:border-0">
-                      <div className="flex items-start justify-between mb-3">
-                        <div>
-                          <div className="flex items-center gap-2 mb-2">
-                            <div className="flex">
-                              {[1, 2, 3, 4, 5].map((star) => (
-                                <Star
-                                  key={star}
-                                  className={`h-4 w-4 ${
-                                    star <= review.overallRating
-                                      ? "fill-yellow-400 text-yellow-400"
-                                      : "text-gray-300"
-                                  }`}
-                                />
-                              ))}
-                            </div>
-                            <span className="text-sm font-medium">{review.overallRating}/5</span>
+              </div>
+            )}
+            {offer.geographicRestrictions && offer.geographicRestrictions.length > 0 && (
+              <div className="flex items-start gap-3">
+                <MapPin className="h-5 w-5 text-muted-foreground mt-0.5" />
+                <div>
+                  <div className="font-semibold">Geographic Restrictions</div>
+                  <div className="text-muted-foreground">{offer.geographicRestrictions.join(', ')}</div>
+                </div>
+              </div>
+            )}
+            {offer.contentStyleRequirements && (
+              <div className="pt-4 border-t">
+                <div className="font-semibold mb-2">Content Style Requirements</div>
+                <p className="text-muted-foreground whitespace-pre-wrap">{offer.contentStyleRequirements}</p>
+              </div>
+            )}
+            {offer.brandSafetyRequirements && (
+              <div className="pt-4 border-t">
+                <div className="font-semibold mb-2">Brand Safety Requirements</div>
+                <p className="text-muted-foreground whitespace-pre-wrap">{offer.brandSafetyRequirements}</p>
+              </div>
+            )}
+            {!offer.minimumFollowers && 
+             !offer.allowedPlatforms?.length && 
+             !offer.geographicRestrictions?.length && 
+             !offer.contentStyleRequirements && 
+             !offer.brandSafetyRequirements && (
+              <p className="text-center py-8 text-muted-foreground">
+                No specific requirements listed
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Reviews Section */}
+      <div ref={reviewsRef} data-section="reviews" className="space-y-6 mb-12">
+        <h2 className="text-2xl font-bold">Creator Reviews</h2>
+        <Card className="border-card-border">
+          <CardContent className="pt-6">
+            {reviewsLoading ? (
+              <div className="text-center py-12">
+                <p className="text-muted-foreground">Loading reviews...</p>
+              </div>
+            ) : !reviews || reviews.length === 0 ? (
+              <div className="text-center py-12">
+                <Star className="h-12 w-12 text-muted-foreground/50 mx-auto mb-4" />
+                <p className="text-muted-foreground">No reviews yet</p>
+                <p className="text-sm text-muted-foreground mt-1">Be the first to work with this offer and leave a review</p>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {reviews.map((review: any) => (
+                  <div key={review.id} className="border-b pb-6 last:border-0">
+                    <div className="flex items-start justify-between mb-3">
+                      <div>
+                        <div className="flex items-center gap-2 mb-2">
+                          <div className="flex">
+                            {[1, 2, 3, 4, 5].map((star) => (
+                              <Star
+                                key={star}
+                                className={`h-4 w-4 ${
+                                  star <= review.overallRating
+                                    ? "fill-yellow-400 text-yellow-400"
+                                    : "text-gray-300"
+                                }`}
+                              />
+                            ))}
                           </div>
-                          <p className="text-sm text-muted-foreground">
-                            {new Date(review.createdAt).toLocaleDateString('en-US', {
-                              year: 'numeric',
-                              month: 'long',
-                              day: 'numeric',
-                            })}
+                          <span className="text-sm font-medium">{review.overallRating}/5</span>
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          {new Date(review.createdAt).toLocaleDateString('en-US', {
+                            year: 'numeric',
+                            month: 'long',
+                            day: 'numeric',
+                          })}
+                        </p>
+                      </div>
+                    </div>
+
+                    {review.reviewText && (
+                      <p className="text-sm mb-4">{review.reviewText}</p>
+                    )}
+
+                    {/* Rating breakdown */}
+                    <div className="grid grid-cols-2 gap-3 text-sm">
+                      {review.paymentSpeedRating && (
+                        <div className="flex items-center justify-between">
+                          <span className="text-muted-foreground">Payment Speed</span>
+                          <div className="flex items-center gap-1">
+                            {[1, 2, 3, 4, 5].map((star) => (
+                              <Star
+                                key={star}
+                                className={`h-3 w-3 ${
+                                  star <= review.paymentSpeedRating
+                                    ? "fill-yellow-400 text-yellow-400"
+                                    : "text-gray-300"
+                                }`}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {review.communicationRating && (
+                        <div className="flex items-center justify-between">
+                          <span className="text-muted-foreground">Communication</span>
+                          <div className="flex items-center gap-1">
+                            {[1, 2, 3, 4, 5].map((star) => (
+                              <Star
+                                key={star}
+                                className={`h-3 w-3 ${
+                                  star <= review.communicationRating
+                                    ? "fill-yellow-400 text-yellow-400"
+                                    : "text-gray-300"
+                                }`}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {review.offerQualityRating && (
+                        <div className="flex items-center justify-between">
+                          <span className="text-muted-foreground">Offer Quality</span>
+                          <div className="flex items-center gap-1">
+                            {[1, 2, 3, 4, 5].map((star) => (
+                              <Star
+                                key={star}
+                                className={`h-3 w-3 ${
+                                  star <= review.offerQualityRating
+                                    ? "fill-yellow-400 text-yellow-400"
+                                    : "text-gray-300"
+                                }`}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {review.supportRating && (
+                        <div className="flex items-center justify-between">
+                          <span className="text-muted-foreground">Support</span>
+                          <div className="flex items-center gap-1">
+                            {[1, 2, 3, 4, 5].map((star) => (
+                              <Star
+                                key={star}
+                                className={`h-3 w-3 ${
+                                  star <= review.supportRating
+                                    ? "fill-yellow-400 text-yellow-400"
+                                    : "text-gray-300"
+                                }`}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Company response */}
+                    {review.companyResponse && (
+                      <div className="mt-4 bg-muted/50 rounded-lg p-4">
+                        <p className="text-sm font-medium mb-2">Company Response</p>
+                        <p className="text-sm text-muted-foreground">{review.companyResponse}</p>
+                        {review.companyRespondedAt && (
+                          <p className="text-xs text-muted-foreground mt-2">
+                            Responded on {new Date(review.companyRespondedAt).toLocaleDateString()}
                           </p>
-                        </div>
-                      </div>
-
-                      {review.reviewText && (
-                        <p className="text-sm mb-4">{review.reviewText}</p>
-                      )}
-
-                      {/* Rating breakdown */}
-                      <div className="grid grid-cols-2 gap-3 text-sm">
-                        {review.paymentSpeedRating && (
-                          <div className="flex items-center justify-between">
-                            <span className="text-muted-foreground">Payment Speed</span>
-                            <div className="flex items-center gap-1">
-                              {[1, 2, 3, 4, 5].map((star) => (
-                                <Star
-                                  key={star}
-                                  className={`h-3 w-3 ${
-                                    star <= review.paymentSpeedRating
-                                      ? "fill-yellow-400 text-yellow-400"
-                                      : "text-gray-300"
-                                  }`}
-                                />
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                        {review.communicationRating && (
-                          <div className="flex items-center justify-between">
-                            <span className="text-muted-foreground">Communication</span>
-                            <div className="flex items-center gap-1">
-                              {[1, 2, 3, 4, 5].map((star) => (
-                                <Star
-                                  key={star}
-                                  className={`h-3 w-3 ${
-                                    star <= review.communicationRating
-                                      ? "fill-yellow-400 text-yellow-400"
-                                      : "text-gray-300"
-                                  }`}
-                                />
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                        {review.offerQualityRating && (
-                          <div className="flex items-center justify-between">
-                            <span className="text-muted-foreground">Offer Quality</span>
-                            <div className="flex items-center gap-1">
-                              {[1, 2, 3, 4, 5].map((star) => (
-                                <Star
-                                  key={star}
-                                  className={`h-3 w-3 ${
-                                    star <= review.offerQualityRating
-                                      ? "fill-yellow-400 text-yellow-400"
-                                      : "text-gray-300"
-                                  }`}
-                                />
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                        {review.supportRating && (
-                          <div className="flex items-center justify-between">
-                            <span className="text-muted-foreground">Support</span>
-                            <div className="flex items-center gap-1">
-                              {[1, 2, 3, 4, 5].map((star) => (
-                                <Star
-                                  key={star}
-                                  className={`h-3 w-3 ${
-                                    star <= review.supportRating
-                                      ? "fill-yellow-400 text-yellow-400"
-                                      : "text-gray-300"
-                                  }`}
-                                />
-                              ))}
-                            </div>
-                          </div>
                         )}
                       </div>
-
-                      {/* Company response */}
-                      {review.companyResponse && (
-                        <div className="mt-4 bg-muted/50 rounded-lg p-4">
-                          <p className="text-sm font-medium mb-2">Company Response</p>
-                          <p className="text-sm text-muted-foreground">{review.companyResponse}</p>
-                          {review.companyRespondedAt && (
-                            <p className="text-xs text-muted-foreground mt-2">
-                              Responded on {new Date(review.companyRespondedAt).toLocaleDateString()}
-                            </p>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Sticky Apply Button */}
       <div className="fixed bottom-0 left-0 right-0 border-t bg-background/95 backdrop-blur p-4 z-40">

@@ -923,6 +923,7 @@ export class DatabaseStorage implements IStorage {
       commission_details.amount = offer.commissionAmount;
     }
 
+    // ✅ FIX: Added featuredImageUrl to the VALUES list
     const result = await db.execute(sql`
       INSERT INTO offers (
         id, company_id, title, slug, short_description, full_description,
@@ -949,7 +950,7 @@ export class DatabaseStorage implements IStorage {
         NOW(),
         ARRAY[]::varchar[],
         '{}'::jsonb,
-        NULL,
+        ${offer.featuredImageUrl || null},
         false,
         0,
         0,

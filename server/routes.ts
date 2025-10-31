@@ -198,10 +198,64 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.put("/api/offers/:id", requireAuth, requireRole('company'), async (req, res) => {
     try {
+      const userId = (req.user as any).id;
+      const offerId = req.params.id;
+
+      // Verify ownership
+      const offer = await storage.getOffer(offerId);
+      if (!offer) {
+        return res.status(404).send("Offer not found");
+      }
+
+      const companyProfile = await storage.getCompanyProfile(userId);
+      if (!companyProfile || offer.companyId !== companyProfile.id) {
+        return res.status(403).send("Unauthorized: You don't own this offer");
+      }
+
       const validated = insertOfferSchema.partial().parse(req.body);
-      const offer = await storage.updateOffer(req.params.id, validated);
-      res.json(offer);
+      const updatedOffer = await storage.updateOffer(offerId, validated);
+      res.json(updatedOffer);
     } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  // DELETE offer endpoint - FIXED
+  app.delete("/api/offers/:id", requireAuth, requireRole('company'), async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const offerId = req.params.id;
+
+      // Verify ownership
+      const offer = await storage.getOffer(offerId);
+      if (!offer) {
+        return res.status(404).send("Offer not found");
+      }
+
+      const companyProfile = await storage.getCompanyProfile(userId);
+      if (!companyProfile || offer.companyId !== companyProfile.id) {
+        return res.status(403).send("Unauthorized: You don't own this offer");
+      }
+
+      // Check for active applications
+      const applications = await storage.getApplicationsByOffer(offerId);
+      const hasActiveApplications = applications.some(
+        app => app.status === 'active' || app.status === 'approved'
+      );
+
+      if (hasActiveApplications) {
+        return res.status(400).json({
+          error: "Cannot delete offer with active applications",
+          message: "This offer has active applications. Please complete or reject them first."
+        });
+      }
+
+      // Delete the offer (cascades to videos, applications, favorites per DB constraints)
+      await storage.deleteOffer(offerId);
+
+      res.json({ success: true, message: "Offer deleted successfully" });
+    } catch (error: any) {
+      console.error('[DELETE /api/offers/:id] Error:', error);
       res.status(500).send(error.message);
     }
   });

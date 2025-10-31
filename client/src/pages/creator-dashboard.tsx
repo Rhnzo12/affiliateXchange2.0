@@ -8,6 +8,18 @@ import { Badge } from "@/components/ui/badge";
 import { DollarSign, TrendingUp, FileText, MessageSquare, Heart, Star, Play } from "lucide-react";
 import { Link } from "wouter";
 
+// Helper function to format commission display
+const formatCommission = (offer: any) => {
+  if (offer.commissionAmount) {
+    return `$${offer.commissionAmount}`;
+  } else if (offer.commissionPercentage) {
+    return `${offer.commissionPercentage}%`;
+  } else if (offer.commissionRate) {
+    return `$${offer.commissionRate}`;
+  }
+  return "$0";
+};
+
 export default function CreatorDashboard() {
   const { toast } = useToast();
   const { isAuthenticated, isLoading, user } = useAuth();
@@ -178,7 +190,7 @@ export default function CreatorDashboard() {
                       <div className="flex items-center justify-between pt-2">
                         <Badge variant="secondary">{offer.commissionType.replace('_', ' ')}</Badge>
                         <span className="font-mono font-semibold text-primary">
-                          ${offer.commissionAmount || '0'}
+                          {formatCommission(offer)}
                         </span>
                       </div>
                     </CardContent>

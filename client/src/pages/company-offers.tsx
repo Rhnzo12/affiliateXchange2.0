@@ -1,22 +1,35 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { TrendingUp, Plus, DollarSign, Users, Eye, MoreVertical } from "lucide-react";
+import { TrendingUp, Plus, DollarSign, Users, Eye, MoreVertical, Trash2, Edit } from "lucide-react";
 import { Link } from "wouter";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 
 export default function CompanyOffers() {
   const { toast } = useToast();
   const { isAuthenticated, isLoading } = useAuth();
+  const [offerToDelete, setOfferToDelete] = useState<{ id: string; title: string } | null>(null);
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -35,6 +48,37 @@ export default function CompanyOffers() {
     queryKey: ["/api/company/offers"],
     enabled: isAuthenticated,
   });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (offerId: string) => {
+      await apiRequest("DELETE", `/api/offers/${offerId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/company/offers"] });
+      toast({
+        title: "Success",
+        description: "Offer deleted successfully",
+      });
+      setOfferToDelete(null);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to delete offer",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleDeleteClick = (offer: any) => {
+    setOfferToDelete({ id: offer.id, title: offer.title });
+  };
+
+  const handleConfirmDelete = () => {
+    if (offerToDelete) {
+      deleteMutation.mutate(offerToDelete.id);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -120,6 +164,21 @@ export default function CompanyOffers() {
                         View Details
                       </Link>
                     </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link href={`/company/offers/${offer.id}/edit`}>
+                        <Edit className="mr-2 h-4 w-4" />
+                        Edit Offer
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      className="text-destructive focus:text-destructive"
+                      onClick={() => handleDeleteClick(offer)}
+                      data-testid={`button-delete-${offer.id}`}
+                    >
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      Delete Offer
+                    </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
               </CardHeader>
@@ -173,6 +232,33 @@ export default function CompanyOffers() {
           ))}
         </div>
       )}
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={!!offerToDelete} onOpenChange={() => setOfferToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete the offer "{offerToDelete?.title}". This action cannot be undone.
+              {offers.find(o => o.id === offerToDelete?.id)?.applicationCount > 0 && (
+                <span className="block mt-2 text-destructive font-semibold">
+                  ⚠️ Warning: This offer has {offers.find(o => o.id === offerToDelete?.id)?.applicationCount} active application(s).
+                </span>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteMutation.isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmDelete}
+              disabled={deleteMutation.isPending}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleteMutation.isPending ? "Deleting..." : "Delete Offer"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
