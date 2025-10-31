@@ -187,9 +187,7 @@ export function AppSidebar() {
         <div className="flex items-center justify-between">
           <Link href="/">
             <div className="flex items-center gap-2 cursor-pointer">
-              <div className="h-8 w-8 rounded-md bg-primary flex items-center justify-center">
-                <Zap className="h-5 w-5 text-primary-foreground" />
-              </div>
+              <img src="/logo.png" alt="AffiliateXchange Logo" className="h-8 w-8 rounded-md object-cover" />
               <span className="font-bold text-lg">AffiliateXchange</span>
             </div>
           </Link>
