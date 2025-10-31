@@ -20,9 +20,7 @@ export default function Landing() {
       <header className="border-b sticky top-0 z-50 bg-background/95 backdrop-blur">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-md bg-primary flex items-center justify-center">
-              <Zap className="h-5 w-5 text-primary-foreground" />
-            </div>
+            <img src="/logo.png" alt="AffiliateXchange Logo" className="h-8 w-8 rounded-md object-cover" />
             <span className="text-xl font-bold">AffiliateXchange</span>
           </div>
           <Button onClick={handleLogin} data-testid="button-login">
