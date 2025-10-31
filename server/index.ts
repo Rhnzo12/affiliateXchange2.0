@@ -4,6 +4,7 @@ import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 
 const app = express();
+app.disable('x-powered-by'); // Security: Hide Express server information
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
