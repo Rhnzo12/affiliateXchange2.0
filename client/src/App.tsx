@@ -37,6 +37,7 @@ import AdminCreators from "@/pages/admin-creators";
 import Onboarding from "@/pages/onboarding";
 import Login from "@/pages/login";
 import Register from "@/pages/register";
+import SelectRole from "@/pages/select-role";
 
 // Public routes that don't require authentication
 function PublicRouter() {
@@ -45,6 +46,7 @@ function PublicRouter() {
       <Route path="/" component={Landing} />
       <Route path="/login" component={Login} />
       <Route path="/register" component={Register} />
+      <Route path="/select-role" component={SelectRole} />
       <Route component={Landing} />
     </Switch>
   );
@@ -159,7 +161,7 @@ function Router() {
   const { isAuthenticated, isLoading } = useAuth();
 
   // Define public routes
-  const publicRoutes = ['/login', '/register'];
+  const publicRoutes = ['/login', '/register', '/select-role'];
   const isPublicRoute = publicRoutes.includes(location);
 
   // While loading, show a loading state

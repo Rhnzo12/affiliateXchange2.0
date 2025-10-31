@@ -66,7 +66,7 @@ export async function setupGoogleAuth(app: Express) {
             return done(null, updatedUser);
           }
 
-          // New user - create account with Google
+          // New user - store Google data in session for role selection
           // Generate username from email (before @)
           const baseUsername = email.split("@")[0];
           let username = baseUsername;
@@ -78,34 +78,17 @@ export async function setupGoogleAuth(app: Express) {
             counter++;
           }
 
-          // Create new user - default to 'creator' role
-          // User can be prompted to select role on first login if needed
-          const newUser = await storage.createUser({
-            username,
-            email,
-            password: null, // No password for OAuth users
+          // Return a special user object indicating role selection is needed
+          // This will be stored in the session temporarily
+          return done(null, {
+            isNewGoogleUser: true,
             googleId: googleId,
+            email: email,
+            username: username,
             firstName: firstName || null,
             lastName: lastName || null,
             profileImageUrl: profileImageUrl || null,
-            role: 'creator', // Default role, can be changed later
-            accountStatus: 'active',
-          });
-
-          // Create default creator profile for new Google users
-          await storage.createCreatorProfile({
-            userId: newUser.id,
-            bio: null,
-            youtubeUrl: null,
-            tiktokUrl: null,
-            instagramUrl: null,
-            youtubeFollowers: null,
-            tiktokFollowers: null,
-            instagramFollowers: null,
-            niches: [],
-          });
-
-          return done(null, newUser);
+          } as any);
         } catch (error) {
           console.error("[Google Auth] Error during authentication:", error);
           return done(error as Error, undefined);
@@ -124,10 +107,16 @@ export async function setupGoogleAuth(app: Express) {
     "/api/auth/google/callback",
     passport.authenticate("google", { failureRedirect: "/login?error=google_auth_failed" }),
     (req, res) => {
-      // Successful authentication
-      const user = req.user as User;
+      // Check if this is a new Google user needing role selection
+      const user = req.user as any;
 
-      // Redirect based on role
+      if (user.isNewGoogleUser) {
+        // Store Google user data in session for role selection
+        (req.session as any).pendingGoogleUser = user;
+        return res.redirect("/select-role");
+      }
+
+      // Existing user - redirect based on role
       if (user.role === "creator") {
         res.redirect("/browse");
       } else if (user.role === "company") {
@@ -139,6 +128,96 @@ export async function setupGoogleAuth(app: Express) {
       }
     }
   );
+
+  // API endpoint to complete Google OAuth registration with role selection
+  app.post("/api/auth/google/complete-registration", async (req, res) => {
+    try {
+      const { role } = req.body;
+      const pendingUser = (req.session as any).pendingGoogleUser;
+
+      if (!pendingUser) {
+        return res.status(400).json({ error: "No pending Google registration found" });
+      }
+
+      if (!role || !["creator", "company"].includes(role)) {
+        return res.status(400).json({ error: "Invalid role. Must be 'creator' or 'company'" });
+      }
+
+      // Create the user with the selected role
+      const newUser = await storage.createUser({
+        username: pendingUser.username,
+        email: pendingUser.email,
+        password: null, // No password for OAuth users
+        googleId: pendingUser.googleId,
+        firstName: pendingUser.firstName,
+        lastName: pendingUser.lastName,
+        profileImageUrl: pendingUser.profileImageUrl,
+        role: role,
+        accountStatus: 'active',
+      });
+
+      // Create role-specific profile
+      if (role === 'creator') {
+        await storage.createCreatorProfile({
+          userId: newUser.id,
+          bio: null,
+          youtubeUrl: null,
+          tiktokUrl: null,
+          instagramUrl: null,
+          youtubeFollowers: null,
+          tiktokFollowers: null,
+          instagramFollowers: null,
+          niches: [],
+        });
+      } else if (role === 'company') {
+        await storage.createCompanyProfile({
+          userId: newUser.id,
+          legalName: pendingUser.username,
+          tradeName: null,
+          websiteUrl: null,
+          description: null,
+          logoUrl: null,
+          industry: null,
+          companySize: null,
+          yearFounded: null,
+          contactName: pendingUser.firstName && pendingUser.lastName
+            ? `${pendingUser.firstName} ${pendingUser.lastName}`
+            : null,
+          contactJobTitle: null,
+          phoneNumber: null,
+          businessAddress: null,
+          verificationDocumentUrl: null,
+          status: 'pending',
+          rejectionReason: null,
+        });
+      }
+
+      // Clear pending user from session
+      delete (req.session as any).pendingGoogleUser;
+
+      // Log the user in
+      req.login(newUser, (err) => {
+        if (err) {
+          console.error("[Google Auth] Login error after registration:", err);
+          return res.status(500).json({ error: "Registration successful but login failed" });
+        }
+
+        res.json({
+          success: true,
+          user: {
+            id: newUser.id,
+            username: newUser.username,
+            email: newUser.email,
+            role: newUser.role,
+          },
+          role: newUser.role,
+        });
+      });
+    } catch (error: any) {
+      console.error("[Google Auth] Registration completion error:", error);
+      res.status(500).json({ error: error.message || "Failed to complete registration" });
+    }
+  });
 
   console.log("[Google Auth] Google OAuth authentication configured successfully");
 }
