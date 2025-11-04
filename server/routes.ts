@@ -5,9 +5,10 @@ import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./localAuth";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
 import { db } from "./db";
-import { offerVideos } from "@shared/schema";
-import { eq } from "drizzle-orm";
+import { offerVideos, applications, analytics } from "@shared/schema";
+import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
+import { checkClickFraud, logFraudDetection } from "./fraudDetection";
 import { NotificationService } from "./notifications/notificationService";
 import {
   insertCreatorProfileSchema,
@@ -44,6 +45,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Setup Local Auth
   await setupAuth(app);
 
+  // Initialize notification service
+  const notificationService = new NotificationService(storage);
+
   // Profile routes
   app.get("/api/profile", requireAuth, async (req, res) => {
     try {
@@ -74,9 +78,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = (req.user as any).id;
       const user = req.user as any;
 
+      console.log("[Profile Update] User role:", user.role);
+      console.log("[Profile Update] Request body:", req.body);
+
       if (user.role === 'creator') {
         const validated = insertCreatorProfileSchema.partial().parse(req.body);
+        console.log("[Profile Update] Validated data:", validated);
         const profile = await storage.updateCreatorProfile(userId, validated);
+        console.log("[Profile Update] Updated profile:", profile);
         return res.json(profile);
       } else if (user.role === 'company') {
         const validated = insertCompanyProfileSchema.partial().parse(req.body);
@@ -125,10 +134,151 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/offers/recommended", requireAuth, async (req, res) => {
     try {
-      // TODO: Implement recommendation algorithm
-      const offers = await storage.getOffers({});
-      res.json(offers.slice(0, 3));
+      const userId = req.user!.id;
+
+      // Get creator profile with niches
+      const creatorProfile = await storage.getCreatorProfile(userId);
+      if (!creatorProfile) {
+        return res.json([]);
+      }
+
+      const creatorNiches = creatorProfile.niches || [];
+
+      // Get all approved offers
+      const allOffers = await storage.getOffers({ status: 'approved' });
+
+      // Get creator's past applications
+      const pastApplications = await db
+        .select({
+          offerId: applications.offerId,
+          status: applications.status,
+        })
+        .from(applications)
+        .where(eq(applications.creatorId, userId));
+
+      const appliedOfferIds = new Set(pastApplications.map(app => app.offerId));
+
+      // Get creator's performance by niche
+      const performanceByNiche: Record<string, number> = {};
+
+      if (pastApplications.length > 0) {
+        const approvedAppIds = pastApplications
+          .filter(app => app.status === 'approved' || app.status === 'active')
+          .map(app => app.offerId);
+
+        if (approvedAppIds.length > 0) {
+          // Get analytics for approved applications
+          const performanceData = await db
+            .select({
+              offerId: analytics.offerId,
+              totalConversions: sql<number>`SUM(${analytics.conversions})`,
+              totalClicks: sql<number>`SUM(${analytics.clicks})`,
+            })
+            .from(analytics)
+            .where(eq(analytics.creatorId, userId))
+            .groupBy(analytics.offerId);
+
+          // Map performance to niches
+          for (const perf of performanceData) {
+            const offer = allOffers.find(o => o.id === perf.offerId);
+            if (offer) {
+              const conversionRate = perf.totalClicks > 0
+                ? (Number(perf.totalConversions) / Number(perf.totalClicks)) * 100
+                : 0;
+
+              // Track performance for primary niche
+              if (offer.primaryNiche) {
+                performanceByNiche[offer.primaryNiche] =
+                  (performanceByNiche[offer.primaryNiche] || 0) + conversionRate;
+              }
+
+              // Track performance for additional niches
+              if (offer.additionalNiches) {
+                for (const niche of offer.additionalNiches) {
+                  performanceByNiche[niche] =
+                    (performanceByNiche[niche] || 0) + conversionRate;
+                }
+              }
+            }
+          }
+        }
+      }
+
+      // Score each offer
+      const scoredOffers = allOffers
+        .filter(offer => !appliedOfferIds.has(offer.id))
+        .map(offer => {
+          let score = 0;
+
+          // 1. Niche matching (0-100 points)
+          const offerNiches = [
+            offer.primaryNiche,
+            ...(offer.additionalNiches || [])
+          ].filter(Boolean);
+
+          const matchingNiches = offerNiches.filter(niche =>
+            creatorNiches.some(creatorNiche =>
+              creatorNiche.toLowerCase() === niche.toLowerCase()
+            )
+          );
+
+          // Primary niche match = 50 points, additional niche match = 25 points each
+          if (matchingNiches.includes(offer.primaryNiche)) {
+            score += 50;
+          }
+
+          const additionalMatches = matchingNiches.filter(
+            niche => niche !== offer.primaryNiche
+          ).length;
+          score += additionalMatches * 25;
+
+          // Cap niche score at 100
+          const nicheScore = Math.min(score, 100);
+
+          // 2. Performance in similar niches (0-50 points)
+          let performanceScore = 0;
+          for (const niche of offerNiches) {
+            if (performanceByNiche[niche]) {
+              performanceScore += performanceByNiche[niche];
+            }
+          }
+          performanceScore = Math.min(performanceScore, 50);
+
+          // 3. Offer popularity (0-30 points)
+          const viewScore = Math.min((offer.viewCount || 0) / 10, 15);
+          const applicationScore = Math.min((offer.applicationCount || 0) / 5, 15);
+          const popularityScore = viewScore + applicationScore;
+
+          // 4. Commission attractiveness (0-20 points)
+          let commissionScore = 0;
+          if (offer.commissionType === 'per_sale' && offer.commissionAmount) {
+            commissionScore = Math.min(Number(offer.commissionAmount) / 10, 20);
+          } else if (offer.commissionType === 'per_sale' && offer.commissionPercentage) {
+            commissionScore = Math.min(Number(offer.commissionPercentage) / 2, 20);
+          } else if (offer.commissionType === 'monthly_retainer' && offer.retainerAmount) {
+            commissionScore = Math.min(Number(offer.retainerAmount) / 100, 20);
+          } else if (offer.commissionType === 'per_click') {
+            commissionScore = 10; // Base score for per-click
+          } else if (offer.commissionType === 'per_lead') {
+            commissionScore = 12; // Base score for per-lead
+          }
+
+          const totalScore = nicheScore + performanceScore + popularityScore + commissionScore;
+
+          return {
+            offer,
+            score: totalScore,
+            matchingNiches: matchingNiches.length,
+          };
+        })
+        .sort((a, b) => b.score - a.score);
+
+      // Return top 10 recommended offers
+      const topOffers = scoredOffers.slice(0, 10).map(item => item.offer);
+
+      res.json(topOffers);
     } catch (error: any) {
+      console.error('[Recommendations] Error:', error);
       res.status(500).send(error.message);
     }
   });
@@ -292,6 +442,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const application = await storage.createApplication(validated);
 
+      // 🆕 GET OFFER, CREATOR, AND COMPANY INFO FOR NOTIFICATION
+      const offer = await storage.getOffer(application.offerId);
+      const creator = await storage.getUserById(application.creatorId);
+      
+      if (offer && creator) {
+        const company = await storage.getCompanyProfileById(offer.companyId);
+        
+        if (company) {
+          // 🆕 SEND NOTIFICATION TO COMPANY
+          await notificationService.sendNotification(
+            company.userId,
+            'new_application',
+            'New Application Received! 📩',
+            `${creator.firstName || creator.username} has applied to your offer "${offer.title}". Review their application now.`,
+            {
+              userName: company.contactName || 'there',
+              offerTitle: offer.title,
+              linkUrl: `/company-applications`,
+              applicationId: application.id,
+            }
+          );
+          console.log(`[Notification] Sent new application notification to company ${company.legalName}`);
+        }
+      }
+
       // TODO: Schedule auto-approval job for 7 minutes later
 
       res.json(application);
@@ -320,8 +495,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
         trackingCode
       );
 
+      // 🆕 GET OFFER AND CREATOR INFO FOR NOTIFICATION
+      const offer = await storage.getOffer(application.offerId);
+      const creator = await storage.getUserById(application.creatorId);
+
+      // 🆕 SEND NOTIFICATION TO CREATOR
+      if (offer && creator) {
+        await notificationService.sendNotification(
+          application.creatorId,
+          'application_status_change',
+          'Your application has been approved! 🎉',
+          `Congratulations! Your application for "${offer.title}" has been approved. You can now start promoting this offer.`,
+          {
+            userName: creator.firstName || creator.username,
+            offerTitle: offer.title,
+            trackingLink: trackingLink,
+            linkUrl: `/applications/${application.id}`,
+            applicationStatus: 'approved',
+          }
+        );
+        console.log(`[Notification] Sent approval notification to creator ${creator.username}`);
+      }
+
       res.json(approved);
     } catch (error: any) {
+      console.error('[Approve Application] Error:', error);
       res.status(500).send(error.message);
     }
   });
@@ -354,8 +552,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
         status: 'rejected',
       });
 
+      // 🆕 GET CREATOR INFO FOR NOTIFICATION
+      const creator = await storage.getUserById(application.creatorId);
+
+      // 🆕 SEND NOTIFICATION TO CREATOR
+      if (creator) {
+        await notificationService.sendNotification(
+          application.creatorId,
+          'application_status_change',
+          'Application Update',
+          `Your application for "${offer.title}" was not approved at this time. Don't worry - there are many other great offers available!`,
+          {
+            userName: creator.firstName || creator.username,
+            offerTitle: offer.title,
+            linkUrl: `/browse`,
+            applicationStatus: 'rejected',
+          }
+        );
+        console.log(`[Notification] Sent rejection notification to creator ${creator.username}`);
+      }
+
       res.json(rejected);
     } catch (error: any) {
+      console.error('[Reject Application] Error:', error);
       res.status(500).send(error.message);
     }
   });
@@ -477,7 +696,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/go/:code", async (req, res) => {
     try {
       const trackingCode = req.params.code;
-      
+
       // Look up application by tracking code
       const application = await storage.getApplicationByTrackingCode(trackingCode);
       if (!application) {
@@ -503,7 +722,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } else if (req.ip) {
         clientIp = req.ip;
       }
-      
+
       // Clean IPv6-mapped IPv4 addresses (::ffff:192.168.1.1 → 192.168.1.1)
       if (clientIp.startsWith('::ffff:')) {
         clientIp = clientIp.substring(7);
@@ -512,16 +731,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userAgent = req.headers['user-agent'] || 'unknown';
       const refererRaw = req.headers['referer'] || req.headers['referrer'];
       const referer = Array.isArray(refererRaw) ? refererRaw[0] : (refererRaw || 'direct');
-      
+
+      // Parse UTM parameters from query string
+      const utmSource = req.query.utm_source as string | undefined;
+      const utmMedium = req.query.utm_medium as string | undefined;
+      const utmCampaign = req.query.utm_campaign as string | undefined;
+      const utmTerm = req.query.utm_term as string | undefined;
+      const utmContent = req.query.utm_content as string | undefined;
+
+      // Perform fraud detection check
+      const fraudCheck = await checkClickFraud(clientIp, userAgent, referer, application.id);
+
+      // Log fraud detection result
+      if (!fraudCheck.isValid) {
+        logFraudDetection(trackingCode, clientIp, fraudCheck);
+      }
+
       // Log the click asynchronously (don't block redirect)
+      // Note: We still log even if fraud is detected, but mark it with fraud score
       storage.logTrackingClick(application.id, {
         ip: clientIp,
         userAgent,
         referer,
         timestamp: new Date(),
+        fraudScore: fraudCheck.fraudScore,
+        fraudFlags: fraudCheck.flags.join(','),
+        utmSource,
+        utmMedium,
+        utmCampaign,
+        utmTerm,
+        utmContent,
       }).catch(err => console.error('[Tracking] Error logging click:', err));
 
-      // Redirect to product URL
+      // Always redirect to maintain good UX
+      // Even fraudulent clicks get redirected (but won't count toward analytics if fraud score > 50)
       res.redirect(302, offer.productUrl);
     } catch (error: any) {
       console.error('[Tracking] Error:', error);
@@ -860,8 +1103,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const payment = await storage.updatePaymentStatus(id, status);
+
+      // 🆕 SEND NOTIFICATION WHEN PAYMENT IS COMPLETED
+      if (status === 'completed') {
+        const creator = await storage.getUserById(payment.creatorId);
+        const offer = await storage.getOffer(payment.offerId);
+
+        if (creator && offer) {
+          await notificationService.sendNotification(
+            payment.creatorId,
+            'payment_received',
+            'Payment Received! 💰',
+            `You've received a payment of $${payment.netAmount} for your work on "${offer.title}".`,
+            {
+              userName: creator.firstName || creator.username,
+              offerTitle: offer.title,
+              amount: `$${payment.netAmount}`,
+              linkUrl: `/payments`,
+            }
+          );
+          console.log(`[Notification] Sent payment notification to creator ${creator.username}`);
+        }
+      }
+
       res.json(payment);
     } catch (error: any) {
+      console.error('[Update Payment Status] Error:', error);
       res.status(500).send(error.message);
     }
   });
@@ -926,9 +1193,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).send(error.message);
     }
   });
-
-  // Initialize notification service
-  const notificationService = new NotificationService(storage);
 
   // Notification routes
   app.get("/api/notifications", requireAuth, async (req, res) => {
@@ -1207,6 +1471,111 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Audit Log routes
+  app.get("/api/admin/audit-logs", requireAuth, requireRole('admin'), async (req, res) => {
+    try {
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : 100;
+      const offset = req.query.offset ? parseInt(req.query.offset as string) : 0;
+      const userId = req.query.userId as string | undefined;
+      const action = req.query.action as string | undefined;
+      const entityType = req.query.entityType as string | undefined;
+      const entityId = req.query.entityId as string | undefined;
+
+      const logs = await storage.getAuditLogs({
+        userId,
+        action,
+        entityType,
+        entityId,
+        limit,
+        offset,
+      });
+
+      res.json(logs);
+    } catch (error: any) {
+      console.error('[Audit Logs] Error fetching logs:', error);
+      res.status(500).send(error.message);
+    }
+  });
+
+  // Platform Settings routes
+  app.get("/api/admin/settings", requireAuth, requireRole('admin'), async (req, res) => {
+    try {
+      const category = req.query.category as string | undefined;
+      const settings = category
+        ? await storage.getPlatformSettingsByCategory(category)
+        : await storage.getAllPlatformSettings();
+      res.json(settings);
+    } catch (error: any) {
+      console.error('[Platform Settings] Error fetching settings:', error);
+      res.status(500).send(error.message);
+    }
+  });
+
+  app.get("/api/admin/settings/:key", requireAuth, requireRole('admin'), async (req, res) => {
+    try {
+      const setting = await storage.getPlatformSetting(req.params.key);
+      if (!setting) {
+        return res.status(404).send("Setting not found");
+      }
+      res.json(setting);
+    } catch (error: any) {
+      console.error('[Platform Settings] Error fetching setting:', error);
+      res.status(500).send(error.message);
+    }
+  });
+
+  app.put("/api/admin/settings/:key", requireAuth, requireRole('admin'), async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const { value } = req.body;
+
+      if (value === undefined || value === null) {
+        return res.status(400).send("Value is required");
+      }
+
+      const setting = await storage.updatePlatformSetting(req.params.key, value.toString(), userId);
+
+      // Log the settings change
+      const { logAuditAction, AuditActions, EntityTypes } = await import('./auditLog');
+      await logAuditAction(userId, {
+        action: AuditActions.UPDATE_PLATFORM_SETTINGS,
+        entityType: EntityTypes.PLATFORM_SETTINGS,
+        entityId: req.params.key,
+        changes: { value },
+        reason: req.body.reason,
+      }, req);
+
+      res.json(setting);
+    } catch (error: any) {
+      console.error('[Platform Settings] Error updating setting:', error);
+      res.status(500).send(error.message);
+    }
+  });
+
+  app.post("/api/admin/settings", requireAuth, requireRole('admin'), async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const { key, value, description, category } = req.body;
+
+      if (!key || value === undefined || value === null) {
+        return res.status(400).send("Key and value are required");
+      }
+
+      const setting = await storage.createPlatformSetting({
+        key,
+        value: value.toString(),
+        description: description || null,
+        category: category || null,
+        updatedBy: userId,
+      });
+
+      res.json(setting);
+    } catch (error: any) {
+      console.error('[Platform Settings] Error creating setting:', error);
+      res.status(500).send(error.message);
+    }
+  });
+
   // Object Storage routes
   app.get("/public-objects/:filePath(*)", async (req, res) => {
     const filePath = req.params.filePath;
@@ -1249,7 +1618,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/objects/upload", requireAuth, async (req, res) => {
     const objectStorageService = new ObjectStorageService();
-    const uploadParams = await objectStorageService.getObjectEntityUploadURL();
+    const folder = req.body.folder || undefined; // Optional folder parameter
+    console.log('[Upload API] Requested folder:', req.body.folder);
+    console.log('[Upload API] Folder parameter passed to service:', folder);
+    const uploadParams = await objectStorageService.getObjectEntityUploadURL(folder);
+    console.log('[Upload API] Upload params returned:', uploadParams);
     res.json(uploadParams);
   });
 
@@ -1638,17 +2011,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const paymentPerVideo = monthlyAmount / videosPerMonth;
 
       // Create payment for the approved deliverable
-      await storage.createRetainerPayment({
+      const payment = await storage.createRetainerPayment({
         contractId: contract.id,
         deliverableId: deliverable.id,
         creatorId: deliverable.creatorId,
         companyId: contract.companyId,
         amount: paymentPerVideo.toFixed(2),
-        status: 'pending',
+        status: 'completed',
         description: `Retainer payment for ${contract.title} - Month ${deliverable.monthNumber}, Video ${deliverable.videoNumber}`,
       });
 
       console.log(`[Retainer Payment] Created payment of $${paymentPerVideo.toFixed(2)} for creator ${deliverable.creatorId}`);
+
+      // 🆕 SEND NOTIFICATION TO CREATOR ABOUT PAYMENT
+      const creator = await storage.getUserById(deliverable.creatorId);
+      if (creator) {
+        await notificationService.sendNotification(
+          deliverable.creatorId,
+          'payment_received',
+          'Retainer Payment Received! 💰',
+          `You've received a payment of $${paymentPerVideo.toFixed(2)} for your approved deliverable on "${contract.title}".`,
+          {
+            userName: creator.firstName || creator.username,
+            offerTitle: contract.title,
+            amount: `$${paymentPerVideo.toFixed(2)}`,
+            linkUrl: `/creator/retainer-contracts`,
+          }
+        );
+        console.log(`[Notification] Sent retainer payment notification to creator ${creator.username}`);
+      }
 
       res.json(approved);
     } catch (error: any) {
@@ -1820,6 +2211,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 trackingLink,
                 trackingCode
               );
+
+              // 🆕 SEND NOTIFICATION FOR AUTO-APPROVED APPLICATION
+              const offer = await storage.getOffer(application.offerId);
+              const creator = await storage.getUserById(application.creatorId);
+
+              if (offer && creator) {
+                await notificationService.sendNotification(
+                  application.creatorId,
+                  'application_status_change',
+                  'Your application has been approved! 🎉',
+                  `Congratulations! Your application for "${offer.title}" has been auto-approved. You can now start promoting this offer.`,
+                  {
+                    userName: creator.firstName || creator.username,
+                    offerTitle: offer.title,
+                    trackingLink: trackingLink,
+                    linkUrl: `/applications/${application.id}`,
+                    applicationStatus: 'approved',
+                  }
+                );
+                console.log(`[Auto-Approval] Sent notification to creator ${creator.username}`);
+              }
               
               processedCount++;
               console.log(`[Auto-Approval] ✓ Approved application ${application.id} (${processedCount} total)`);
