@@ -62,26 +62,6 @@ export default function AdminPlatformSettings() {
     },
   });
 
-  const initializeMutation = useMutation({
-    mutationFn: async () => {
-      return await apiRequest("POST", "/api/admin/settings/init/defaults", {});
-    },
-    onSuccess: (data: any) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/settings"] });
-      toast({
-        title: "Success",
-        description: data.message || "Default settings initialized successfully",
-      });
-    },
-    onError: (error: Error) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to initialize settings",
-        variant: "destructive",
-      });
-    },
-  });
-
   const handleEdit = (setting: PlatformSetting) => {
     setEditingSetting(setting);
     setEditValue(setting.value);
@@ -129,7 +109,6 @@ export default function AdminPlatformSettings() {
       general: "General Settings",
       fees: "Fee Configuration",
       limits: "Platform Limits",
-      features: "Feature Flags",
     };
     return titles[category] || category.charAt(0).toUpperCase() + category.slice(1);
   };
@@ -139,13 +118,12 @@ export default function AdminPlatformSettings() {
       general: "General platform configuration and operational settings",
       fees: "Transaction fees, commission rates, and payout thresholds",
       limits: "Platform-wide limits and restrictions",
-      features: "Enable or disable platform features and functionality",
     };
     return descriptions[category] || "";
   };
 
   const isBooleanSetting = (key: string) => {
-    return key.includes("mode") || key.includes("enabled") || key.includes("disabled") || key.includes("required");
+    return key.includes("mode") || key.includes("enabled") || key.includes("disabled");
   };
 
   return (
@@ -162,25 +140,9 @@ export default function AdminPlatformSettings() {
           Loading settings...
         </div>
       ) : !groupedSettings || Object.keys(groupedSettings).length === 0 ? (
-        <Card>
-          <CardContent className="py-12">
-            <div className="text-center space-y-4">
-              <div className="text-muted-foreground">
-                <p className="text-lg font-medium">No settings found</p>
-                <p className="text-sm mt-2">
-                  Initialize default platform settings to get started
-                </p>
-              </div>
-              <Button
-                onClick={() => initializeMutation.mutate()}
-                disabled={initializeMutation.isPending}
-                size="lg"
-              >
-                {initializeMutation.isPending ? "Initializing..." : "Initialize Default Settings"}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+        <div className="text-center py-8 text-muted-foreground">
+          No settings found
+        </div>
       ) : (
         <div className="space-y-6">
           {Object.entries(groupedSettings).map(([category, categorySettings]) => (
