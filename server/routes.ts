@@ -1576,6 +1576,162 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Initialize default platform settings
+  app.post("/api/admin/settings/init/defaults", requireAuth, requireRole('admin'), async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+
+      const defaultSettings = [
+        // General Settings
+        {
+          key: "maintenance_mode",
+          value: "false",
+          description: "Enable maintenance mode to prevent users from accessing the platform",
+          category: "general",
+        },
+        {
+          key: "platform_name",
+          value: "AffiliateXchange",
+          description: "The name of the platform displayed throughout the application",
+          category: "general",
+        },
+        {
+          key: "new_user_registration_enabled",
+          value: "true",
+          description: "Allow new users to register on the platform",
+          category: "general",
+        },
+        {
+          key: "email_notifications_enabled",
+          value: "true",
+          description: "Enable or disable email notifications system-wide",
+          category: "general",
+        },
+
+        // Fee Settings
+        {
+          key: "platform_fee_percentage",
+          value: "4",
+          description: "Platform commission percentage charged on all transactions (in %)",
+          category: "fees",
+        },
+        {
+          key: "stripe_fee_percentage",
+          value: "3",
+          description: "Payment processing fee percentage charged by Stripe (in %)",
+          category: "fees",
+        },
+        {
+          key: "minimum_commission_amount",
+          value: "5",
+          description: "Minimum commission amount that can be set for an offer (in USD)",
+          category: "fees",
+        },
+
+        // Limits and Thresholds
+        {
+          key: "minimum_payout_threshold",
+          value: "50",
+          description: "Minimum balance required before a creator can request a payout (in USD)",
+          category: "limits",
+        },
+        {
+          key: "maximum_withdrawal_amount",
+          value: "10000",
+          description: "Maximum amount that can be withdrawn in a single transaction (in USD)",
+          category: "limits",
+        },
+        {
+          key: "daily_withdrawal_limit",
+          value: "25000",
+          description: "Maximum total amount that can be withdrawn per day (in USD)",
+          category: "limits",
+        },
+        {
+          key: "max_active_offers_per_company",
+          value: "50",
+          description: "Maximum number of active offers a company can have",
+          category: "limits",
+        },
+        {
+          key: "max_applications_per_creator_daily",
+          value: "10",
+          description: "Maximum number of applications a creator can submit per day",
+          category: "limits",
+        },
+
+        // Feature Flags
+        {
+          key: "kyc_verification_required",
+          value: "false",
+          description: "Require KYC verification before users can access platform features",
+          category: "features",
+        },
+        {
+          key: "auto_approve_applications",
+          value: "false",
+          description: "Automatically approve all creator applications to offers",
+          category: "features",
+        },
+        {
+          key: "analytics_enabled",
+          value: "true",
+          description: "Enable analytics tracking for offers and applications",
+          category: "features",
+        },
+        {
+          key: "referral_program_enabled",
+          value: "true",
+          description: "Enable referral program for users to earn rewards",
+          category: "features",
+        },
+        {
+          key: "two_factor_auth_required",
+          value: "false",
+          description: "Require two-factor authentication for all users",
+          category: "features",
+        },
+      ];
+
+      const results = {
+        created: 0,
+        skipped: 0,
+        errors: [] as string[],
+      };
+
+      for (const setting of defaultSettings) {
+        try {
+          // Check if setting already exists
+          const existing = await storage.getPlatformSetting(setting.key);
+
+          if (!existing) {
+            await storage.createPlatformSetting({
+              key: setting.key,
+              value: setting.value,
+              description: setting.description,
+              category: setting.category,
+              updatedBy: userId,
+            });
+            results.created++;
+          } else {
+            results.skipped++;
+          }
+        } catch (error: any) {
+          results.errors.push(`${setting.key}: ${error.message}`);
+        }
+      }
+
+      res.json({
+        success: true,
+        message: `Initialized platform settings: ${results.created} created, ${results.skipped} skipped`,
+        results,
+      });
+    } catch (error: any) {
+      console.error('[Platform Settings] Error initializing defaults:', error);
+      res.status(500).send(error.message);
+    }
+  });
+
   // Object Storage routes
   app.get("/public-objects/:filePath(*)", async (req, res) => {
     const filePath = req.params.filePath;
